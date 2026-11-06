@@ -1,0 +1,25 @@
+name: ORION APK yaratish
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Kodlarni yuklash
+        uses: actions/checkout@v4
+
+      - name: ORION APK yigish
+        uses: ArtemSBulgakov/buildozer-action@v1
+        id: buildozer
+        with:
+          buildozer_version: stable
+
+      - name: APK faylni saqlash
+        uses: actions/upload-artifact@v4
+        with:
+          name: ORION-APK
+          path: ${{ steps.buildozer.outputs.filename }}
