@@ -18,8 +18,8 @@ fullscreen = 0
 android.permissions = INTERNET,CAMERA
 
 android.api = 35
-android.minapi = 24
-android.ndk = 28c
+android.minapi = 26
+android.ndk = 25b
 android.archs = arm64-v8a
 
 p4a.bootstrap = sdl2
