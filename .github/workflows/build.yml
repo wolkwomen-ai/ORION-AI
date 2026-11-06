@@ -33,6 +33,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            ant \
             git zip unzip \
             autoconf automake autopoint \
             gettext libtool libtool-bin m4 \
@@ -41,6 +42,10 @@ jobs:
             libtinfo6 cmake \
             libffi-dev libssl-dev \
             build-essential
+
+      - name: Check ANT
+        run: |
+          ant -version
 
       - name: Install Buildozer
         run: |
