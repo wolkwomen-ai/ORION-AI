@@ -1197,22 +1197,64 @@ class OrionApp(App):
 # 14. ISHGA TUSHIRISH
 # ============================================================
 
+# ============================================================
+# ORION AI — XAVFSIZ ISHGA TUSHIRISH
+# ============================================================
+
 if __name__ == "__main__":
+
+    print("=" * 45)
+    print("ORION AI ULTIMATE")
+    print("Tizim ishga tushmoqda...")
+    print("=" * 45)
 
     try:
 
-        print("=" * 40)
+        write_log("ORION ISHGA TUSHMOQDA")
 
-        print("ORION AI ULTIMATE")
+        # Fayllarni tekshirish
+        write_log("BASE DIR: " + BASE_DIR)
 
-        print("Tizim ishga tushmoqda...")
+        # Xotirani yuklash
+        load_history()
+        load_memory()
 
-        print("=" * 40)
+        write_log("XOTIRA YUKLANDI")
+
+        # API kalitni tekshirish
+        try:
+            get_api_key()
+            write_log("API KEY TOPILDI")
+        except Exception as e:
+            write_log("API KEY MUAMMOSI: " + str(e))
+
+        # Ilovani ishga tushirish
+        write_log("KIVY ISHGA TUSHMOQDA")
 
         OrionApp().run()
 
-    except Exception:
+        write_log("ORION YOPILDI")
 
-        print(traceback.format_exc())
+    except BaseException:
 
-        write_log(traceback.format_exc())
+        error = traceback.format_exc()
+
+        print(error)
+
+        write_log("ASOSIY XATO:")
+        write_log(error)
+
+        try:
+            with open(
+                LOG_FILE,
+                "a",
+                encoding="utf-8"
+            ) as f:
+
+                f.write("\nORION ISHGA TUSHMADI\n")
+                f.write(error)
+
+        except Exception:
+            pass
+
+        raise
