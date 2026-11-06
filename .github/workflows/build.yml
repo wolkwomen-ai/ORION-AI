@@ -1,0 +1,46 @@
+name: ORION APK Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Kodlarni olish
+        uses: actions/checkout@v4
+
+      - name: Java sozlash
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK sozlash
+        uses: android-actions/setup-android@v3
+
+      - name: Kerakli Android paketlarini o'rnatish
+        run: |
+          sdkmanager --licenses
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-35"
+          sdkmanager "build-tools;35.0.0"
+
+      - name: Buildozer o'rnatish
+        run: |
+          pip install --upgrade pip
+          pip install buildozer cython
+
+      - name: APK yaratish
+        run: |
+          buildozer android debug
+
+      - name: APK saqlash
+        uses: actions/upload-artifact@v4
+        with:
+          name: ORION-APK
+          path: bin/*.apk
