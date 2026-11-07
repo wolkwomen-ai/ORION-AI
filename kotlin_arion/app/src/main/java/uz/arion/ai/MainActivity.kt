@@ -281,7 +281,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 speechRecognizer?.setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
                         isListening = true
-                        status.text = "● Tinglayapman…"
+                        status.text = "Ovoz yozilmoqda…"
                         micButton.invalidate()
                     }
                     override fun onBeginningOfSpeech() {}
@@ -329,7 +329,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             }
             isListening = true
             micButton.invalidate()
-            status.text = "● Tinglayapman…"
+            status.text = "Ovoz yozilmoqda…"
             speechRecognizer?.startListening(intent)
         } catch (e: Exception) {
             isListening = false
