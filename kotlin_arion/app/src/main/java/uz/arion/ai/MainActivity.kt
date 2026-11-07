@@ -205,17 +205,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 super.onDraw(canvas)
                 val cx = width / 2f
                 val cy = height / 2f
-                if (isListening) {
-                    paint.style = android.graphics.Paint.Style.FILL
-                    val heights = floatArrayOf(7f, 15f, 23f, 13f, 19f, 9f)
-                    for (i in heights.indices) {
-                        val x = cx - dp(10) + i * dp(4)
-                        val h = dp(heights[i].toInt()).toFloat()
-                        canvas.drawRoundRect(x, cy - h / 2f, x + dp(2), cy + h / 2f, dp(2).toFloat(), dp(2).toFloat(), paint)
-                    }
-                    paint.style = android.graphics.Paint.Style.STROKE
-                    return
-                }
                 canvas.drawRoundRect(
                     cx - dp(4), cy - dp(10), cx + dp(4), cy + dp(4),
                     dp(4).toFloat(), dp(4).toFloat(), paint
