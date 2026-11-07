@@ -5,7 +5,9 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.media.MediaRecorder
+import android.speech.SpeechRecognizer
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
 import java.io.File
 import android.speech.tts.TextToSpeech
 import android.view.Gravity
@@ -28,9 +30,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var status: TextView
     private var tts: TextToSpeech? = null
     private var ttsReady = false
-    private var recorder: MediaRecorder? = null
-    private var recordingFile: File? = null
-    private var isRecording = false
+    private var speechRecognizer: SpeechRecognizer? = null
+    private var isListening = false
     private lateinit var sendButton: TextView
     private lateinit var micButton: View
 
@@ -130,17 +131,17 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         inputParams.setMargins(dp(4), 0, dp(4), 0)
         composer.addView(input, inputParams)
 
-        micButton = makeMicAction(::startRecording)
+        micButton = makeMicAction(::toggleSpeechRecognition)
         composer.addView(micButton)
         val sendParams = LinearLayout.LayoutParams(dp(40), dp(40))
-        sendButton = makeRoundAction("↑", Color.rgb(20, 20, 20), Color.WHITE, ::sendOrStop)
+        sendButton = makeRoundAction("↑", Color.rgb(16, 163, 127), Color.WHITE, ::sendOrStop)
         sendButton.visibility = View.GONE
         composer.addView(sendButton, sendParams)
 
         input.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                if (!isRecording) {
+                if (!isListening) {
                     val hasText = !s.isNullOrBlank()
                     micButton.visibility = if (hasText) View.GONE else View.VISIBLE
                     sendButton.visibility = if (hasText) View.VISIBLE else View.GONE
@@ -204,6 +205,17 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 super.onDraw(canvas)
                 val cx = width / 2f
                 val cy = height / 2f
+                if (isListening) {
+                    paint.style = android.graphics.Paint.Style.FILL
+                    val heights = floatArrayOf(7f, 15f, 23f, 13f, 19f, 9f)
+                    for (i in heights.indices) {
+                        val x = cx - dp(10) + i * dp(4)
+                        val h = dp(heights[i].toInt()).toFloat()
+                        canvas.drawRoundRect(x, cy - h / 2f, x + dp(2), cy + h / 2f, dp(2).toFloat(), dp(2).toFloat(), paint)
+                    }
+                    paint.style = android.graphics.Paint.Style.STROKE
+                    return
+                }
                 canvas.drawRoundRect(
                     cx - dp(4), cy - dp(10), cx + dp(4), cy + dp(4),
                     dp(4).toFloat(), dp(4).toFloat(), paint
@@ -257,68 +269,90 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private fun sendOrStop() {
-        if (isRecording) {
-            stopRecording()
-            addMessage("Siz", "🎙 Ovozli xabar yozildi: " + (recordingFile?.name ?: "audio"))
-            addMessage("ARION", "Ovoz yozuvi saqlandi. Ovozli xabarni AI orqali tinglab javob berish uchun server ulanishi hali kerak.")
-            sendButton.text = "↑"
-            sendButton.visibility = View.GONE
-            micButton.visibility = if (input.text.isNullOrBlank()) View.VISIBLE else View.GONE
-            status.text = "AI yordamchi"
-            return
-        }
         sendMessage()
     }
 
-    private fun startRecording() {
-        if (isRecording) return
+    private fun toggleSpeechRecognition() {
+        if (isListening) {
+            speechRecognizer?.stopListening()
+            return
+        }
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            addMessage("ARION", "Bu telefonda nutqni matnga aylantirish xizmati mavjud emas.")
+            return
+        }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 702)
             return
         }
         try {
-            val file = File(cacheDir, "arion_voice_" + System.currentTimeMillis() + ".m4a")
-            val newRecorder = if (android.os.Build.VERSION.SDK_INT >= 31) MediaRecorder(this) else MediaRecorder()
-            newRecorder.setAudioSource(MediaRecorder.AudioSource.MIC)
-            newRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            newRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            newRecorder.setAudioEncodingBitRate(128000)
-            newRecorder.setAudioSamplingRate(44100)
-            newRecorder.setOutputFile(file.absolutePath)
-            newRecorder.prepare()
-            newRecorder.start()
-            recorder = newRecorder
-            recordingFile = file
-            isRecording = true
-            micButton.visibility = View.GONE
-            sendButton.visibility = View.VISIBLE
-            sendButton.text = "〰"
-            status.text = "● Ovoz yozilmoqda… To‘xtatish uchun tugmani bosing"
+            if (speechRecognizer == null) {
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+                speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        isListening = true
+                        status.text = "● Tinglayapman…"
+                        micButton.invalidate()
+                    }
+                    override fun onBeginningOfSpeech() {}
+                    override fun onRmsChanged(rmsdB: Float) { micButton.invalidate() }
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+                    override fun onEndOfSpeech() {
+                        status.text = "Ovoz qayta ishlanmoqda…"
+                    }
+                    override fun onError(error: Int) {
+                        isListening = false
+                        micButton.invalidate()
+                        status.text = "AI yordamchi"
+                        if (input.text.isNullOrBlank()) {
+                            micButton.visibility = View.VISIBLE
+                            sendButton.visibility = View.GONE
+                        }
+                        if (error != android.speech.SpeechRecognizer.ERROR_NO_MATCH &&
+                            error != android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                            Toast.makeText(this@MainActivity, "Ovozni aniqlashda xatolik ($error)", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    override fun onResults(results: Bundle?) {
+                        isListening = false
+                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        val spoken = matches?.firstOrNull().orEmpty()
+                        if (spoken.isNotBlank()) {
+                            input.setText((input.text.toString() + " " + spoken).trim())
+                            input.setSelection(input.text.length)
+                        }
+                        status.text = "AI yordamchi"
+                        micButton.invalidate()
+                        micButton.visibility = if (input.text.isNullOrBlank()) View.VISIBLE else View.GONE
+                        sendButton.visibility = if (input.text.isNullOrBlank()) View.GONE else View.VISIBLE
+                    }
+                    override fun onPartialResults(partialResults: Bundle?) {}
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
+                })
+            }
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "uz-UZ")
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "uz-UZ")
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            }
+            isListening = true
+            micButton.invalidate()
+            status.text = "● Tinglayapman…"
+            speechRecognizer?.startListening(intent)
         } catch (e: Exception) {
-            isRecording = false
-            recorder?.release()
-            recorder = null
+            isListening = false
+            micButton.invalidate()
+            status.text = "AI yordamchi"
             addMessage("ARION", "Mikrofonni ishga tushirib bo‘lmadi: " + (e.localizedMessage ?: "xatolik"))
-        }
-    }
-
-    private fun stopRecording() {
-        if (!isRecording) return
-        try {
-            recorder?.stop()
-        } catch (_: RuntimeException) {
-            recordingFile?.delete()
-        } finally {
-            recorder?.release()
-            recorder = null
-            isRecording = false
         }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 702 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            startRecording()
+            toggleSpeechRecognition()
         } else if (requestCode == 702) {
             addMessage("ARION", "Ovoz yozish uchun mikrofon ruxsatini yoqing.")
         }
@@ -349,6 +383,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     override fun onDestroy() {
         tts?.stop()
         tts?.shutdown()
+        speechRecognizer?.destroy()
+        speechRecognizer = null
         super.onDestroy()
     }
 }
