@@ -918,6 +918,16 @@ class OrionApp(App):
 
         root.add_widget(title)
 
+        # ARION asosiy menyusi
+        menu_scroll = ScrollView(size_hint_y=None, height=dp(48), do_scroll_x=True, do_scroll_y=False)
+        menu_row = BoxLayout(orientation="horizontal", size_hint_x=None, width=dp(650), spacing=dp(5))
+        menu_scroll.add_widget(menu_row)
+        for caption, action in [("XOTIRA", "memory"), ("AGENT", "agent"), ("OB-HAVO", "weather"), ("HUJJAT", "document"), ("TELEFON", "phone"), ("QIDIRUV", "search")]:
+            button = Button(text=caption, size_hint_x=None, width=dp(100))
+            button.bind(on_release=lambda btn, act=action: self.menu_action(act))
+            menu_row.add_widget(button)
+        root.add_widget(menu_scroll)
+
         self.status = Label(
             text="ARION tayyor.",
             size_hint_y=None,
@@ -1002,6 +1012,127 @@ class OrionApp(App):
         start_server()
 
         return root
+
+    def menu_action(self, action):
+        if action == "memory":
+            with memory_lock:
+                content = "\\n".join(str(i + 1) + ". " + item for i, item in enumerate(memory)) or "Xotira hozircha bo'sh."
+            box = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(8))
+            view = ScrollView()
+            label = Label(text=content, size_hint_y=None, halign="left", valign="top")
+            label.bind(texture_size=lambda obj, size: setattr(obj, "height", size[1] + dp(12)))
+            view.add_widget(label)
+            box.add_widget(view)
+            close = Button(text="YOPISH", size_hint_y=None, height=dp(44))
+            box.add_widget(close)
+            popup = Popup(title="ARION XOTIRASI", content=box, size_hint=(0.9, 0.75))
+            close.bind(on_release=popup.dismiss)
+            popup.open()
+        elif action == "agent":
+            self.agent_mode = not getattr(self, "agent_mode", False)
+            self.status.text = "Agent rejimi: " + ("YOQILDI" if self.agent_mode else "O'CHIRILDI")
+            self.add_message("ARION", "Agent rejimi yoqildi. Vazifani tahlil qilaman; tashqi amallar oldidan sizdan tasdiq so'rayman." if self.agent_mode else "Agent rejimi o'chirildi.")
+        elif action == "weather":
+            box = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(8))
+            city = TextInput(text="Kitob", hint_text="Shahar yoki tuman", size_hint_y=None, height=dp(48), multiline=False)
+            box.add_widget(city)
+            buttons = BoxLayout(size_hint_y=None, height=dp(45), spacing=dp(6))
+            popup = Popup(title="OB-HAVO", content=box, size_hint=(0.9, 0.35))
+            go = Button(text="TEKSHIRISH")
+            cancel = Button(text="BEKOR")
+            buttons.add_widget(go)
+            buttons.add_widget(cancel)
+            box.add_widget(buttons)
+            def get_weather(_):
+                place = city.text.strip()
+                if place:
+                    popup.dismiss()
+                    self.status.text = "Ob-havo olinmoqda..."
+                    threading.Thread(target=self.fetch_weather, args=(place,), daemon=True).start()
+            go.bind(on_release=get_weather)
+            cancel.bind(on_release=popup.dismiss)
+            popup.open()
+        elif action == "document":
+            self.create_document()
+        elif action == "phone":
+            try:
+                from jnius import autoclass
+                PythonActivity = autoclass("org.kivy.android.PythonActivity")
+                Settings = autoclass("android.provider.Settings")
+                Intent = autoclass("android.content.Intent")
+                PythonActivity.mActivity.startActivity(Intent(Settings.ACTION_SETTINGS))
+            except Exception as e:
+                self.add_message("TELEFON", "Sozlamalarni ochib bo'lmadi: " + str(e))
+        elif action == "search":
+            box = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(8))
+            query = TextInput(hint_text="Internetdan nima qidiray?", size_hint_y=None, height=dp(75))
+            box.add_widget(query)
+            buttons = BoxLayout(size_hint_y=None, height=dp(45), spacing=dp(6))
+            popup = Popup(title="INTERNET QIDIRUVI", content=box, size_hint=(0.92, 0.4))
+            go = Button(text="QIDIRISH")
+            cancel = Button(text="BEKOR")
+            buttons.add_widget(go)
+            buttons.add_widget(cancel)
+            box.add_widget(buttons)
+            def run_search(_):
+                q = query.text.strip()
+                if q:
+                    popup.dismiss()
+                    self.status.text = "Internetdan qidirilmoqda..."
+                    threading.Thread(target=self.fetch_search, args=(q,), daemon=True).start()
+            go.bind(on_release=run_search)
+            cancel.bind(on_release=popup.dismiss)
+            popup.open()
+
+    def fetch_weather(self, place):
+        try:
+            geo = requests.get("https://geocoding-api.open-meteo.com/v1/search", params={"name": place, "count": 1, "language": "uz", "format": "json"}, timeout=12)
+            geo.raise_for_status()
+            items = geo.json().get("results", [])
+            if not items:
+                raise RuntimeError("Joy topilmadi. Shahar nomini tekshiring.")
+            loc = items[0]
+            weather = requests.get("https://api.open-meteo.com/v1/forecast", params={"latitude": loc["latitude"], "longitude": loc["longitude"], "current": "temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m", "timezone": "auto"}, timeout=12)
+            weather.raise_for_status()
+            now = weather.json().get("current", {})
+            result = (f"{loc.get('name', place)}: {now.get('temperature_2m', '?')}°C; his qilinishi {now.get('apparent_temperature', '?')}°C; namlik {now.get('relative_humidity_2m', '?')}%; shamol {now.get('wind_speed_10m', '?')} km/soat.")
+            Clock.schedule_once(lambda dt: self.show_answer(result))
+        except Exception as e:
+            error = "Ob-havo xatosi: " + str(e)
+            Clock.schedule_once(lambda dt: self.show_error(error))
+
+    def fetch_search(self, query):
+        result = internet_search(query)
+        Clock.schedule_once(lambda dt: self.show_answer(result))
+
+    def create_document(self):
+        box = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(8))
+        name = TextInput(text="arion_hujjat.txt", hint_text="Fayl nomi", size_hint_y=None, height=dp(45), multiline=False)
+        body = TextInput(hint_text="Hujjat matnini shu yerga yozing...", multiline=True)
+        box.add_widget(name)
+        box.add_widget(body)
+        buttons = BoxLayout(size_hint_y=None, height=dp(45), spacing=dp(6))
+        save = Button(text="SAQLASH")
+        cancel = Button(text="BEKOR")
+        buttons.add_widget(save)
+        buttons.add_widget(cancel)
+        box.add_widget(buttons)
+        popup = Popup(title="HUJJAT YARATISH", content=box, size_hint=(0.94, 0.82))
+        def save_doc(_):
+            filename = os.path.basename(name.text.strip() or "arion_hujjat.txt")
+            if not filename.lower().endswith(".txt"):
+                filename += ".txt"
+            path = os.path.join(self.user_data_dir, filename)
+            try:
+                with open(path, "w", encoding="utf-8") as stream:
+                    stream.write(body.text)
+                popup.dismiss()
+                self.add_message("HUJJAT", "Saqlandi: " + path)
+            except Exception as e:
+                self.add_message("XATO", "Hujjat saqlanmadi: " + str(e))
+        save.bind(on_release=save_doc)
+        cancel.bind(on_release=popup.dismiss)
+        popup.open()
 
     def add_message(self, title, message):
 
