@@ -29,11 +29,14 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = Color.rgb(32, 91, 160)
-        window.navigationBarColor = Color.rgb(32, 91, 160)
+        window.statusBarColor = Color.rgb(255, 255, 255)
+        window.navigationBarColor = Color.rgb(255, 255, 255)
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        }
         tts = TextToSpeech(this, this)
         buildScreen()
-        addMessage("ARION", "Assalomu alaykum! Men ARIONman. Kotlin asosidagi Android ilovasi ishga tushdi.")
+        addMessage("ARION", "Assalomu alaykum! Men ARIONman. Sizga qanday yordam beray?")
     }
 
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
@@ -42,34 +45,50 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(8), dp(12), dp(8))
-            setBackgroundColor(Color.rgb(245, 247, 252))
+            setBackgroundColor(Color.WHITE)
         }
         val header = TextView(this).apply {
-            text = "✦ ARION AI"
-            textSize = 25f
-            setTextColor(Color.rgb(25, 45, 75))
+            text = "ARION"
+            textSize = 21f
+            setTextColor(Color.rgb(25, 25, 25))
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(8), dp(8), dp(8), dp(8))
         }
         root.addView(header)
         status = TextView(this).apply {
-            text = "Tayyor • Android Kotlin"
+            text = "AI yordamchi"
             textSize = 12f
-            setTextColor(Color.DKGRAY)
+            setTextColor(Color.rgb(120, 120, 120))
             setPadding(dp(8), 0, dp(8), dp(8))
         }
         root.addView(status)
-        scroll = ScrollView(this)
-        chat = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+        scroll = ScrollView(this).apply {
+            isFillViewport = true
+            clipToPadding = false
+        }
+        chat = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(2), dp(8), dp(2), dp(12))
+        }
         scroll.addView(chat)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
+        // ChatGPT uslubidagi bitta yumaloq xabar paneli.
         val composer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(5), dp(6), dp(5))
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(247, 247, 248))
+                cornerRadius = dp(28).toFloat()
+                setStroke(dp(1), Color.rgb(225, 225, 225))
+            }
+            elevation = dp(1).toFloat()
         }
+
         input = EditText(this).apply {
-            hint = "Xabar yozing..."
+            hint = "Xabar yuboring"
             textSize = 16f
             minLines = 1
             maxLines = 5
@@ -77,15 +96,14 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             isFocusableInTouchMode = true
             isClickable = true
             showSoftInputOnFocus = true
-            inputType = InputType.TYPE_CLASS_TEXT or
-                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
-                InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_TEXT_FLAG_MULTI_LINE
             imeOptions = EditorInfo.IME_ACTION_SEND
-            setPadding(dp(16), dp(12), dp(16), dp(12))
-            background = GradientDrawable().apply {
-                setColor(Color.WHITE)
-                cornerRadius = dp(24).toFloat()
-                setStroke(dp(1), Color.rgb(215, 222, 232))
+            setTextColor(Color.rgb(30, 30, 30))
+            setHintTextColor(Color.rgb(135, 135, 135))
+            setPadding(dp(10), dp(9), dp(6), dp(9))
+            background = null
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == EditorInfo.IME_ACTION_SEND) { sendMessage(); true } else false
             }
             setOnClickListener {
                 requestFocus()
@@ -95,14 +113,15 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 }
             }
         }
-        val inputParams = LinearLayout.LayoutParams(0, -2, 1f)
-        inputParams.setMargins(0, 0, dp(6), 0)
-        composer.addView(input, inputParams)
-        composer.addView(makeButton("🎙", ::startVoice))
-        composer.addView(makeButton("➤", ::sendMessage))
-        root.addView(composer)
+        composer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
+        composer.addView(makeRoundAction("🎙", Color.rgb(235, 235, 235), Color.rgb(45, 45, 45), ::startVoice))
+        val sendParams = LinearLayout.LayoutParams(dp(42), dp(42))
+        sendParams.setMargins(dp(6), 0, 0, 0)
+        composer.addView(makeRoundAction("↑", Color.rgb(25, 25, 25), Color.WHITE, ::sendMessage), sendParams)
+        val composerParams = LinearLayout.LayoutParams(-1, -2)
+        composerParams.setMargins(0, dp(8), 0, dp(4))
+        root.addView(composer, composerParams)
 
-        // Keep the chat composer above both the keyboard and Android navigation bar.
         root.setOnApplyWindowInsetsListener { view, insets ->
             val left: Int
             val top: Int
@@ -133,20 +152,37 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         )
     }
 
-    private fun makeButton(label: String, action: () -> Unit) =
-        Button(this).apply { text = label; setOnClickListener { action() } }
+    private fun makeRoundAction(label: String, fill: Int, foreground: Int, action: () -> Unit) =
+        TextView(this).apply {
+            text = label
+            textSize = if (label == "↑") 25f else 19f
+            gravity = Gravity.CENTER
+            setTextColor(foreground)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(fill)
+            }
+            if (layoutParams == null) {
+                val size = dp(40)
+                layoutParams = LinearLayout.LayoutParams(size, size)
+            }
+            setOnClickListener { action() }
+        }
 
     private fun addMessage(who: String, message: String) {
         val bubble = TextView(this).apply {
-            text = "$who\n$message"
+            text = message
             textSize = 16f
-            setTextColor(Color.rgb(25, 35, 55))
-            setPadding(dp(14), dp(10), dp(14), dp(10))
-            setBackgroundColor(if (who == "Siz") Color.rgb(220, 235, 255) else Color.WHITE)
+            setTextColor(Color.rgb(35, 35, 35))
+            setPadding(dp(14), dp(11), dp(14), dp(11))
+            background = GradientDrawable().apply {
+                setColor(if (who == "Siz") Color.rgb(240, 240, 240) else Color.WHITE)
+                cornerRadius = dp(18).toFloat()
+            }
             setTextIsSelectable(true)
         }
         val params = LinearLayout.LayoutParams(-1, -2)
-        params.setMargins(0, dp(5), 0, dp(5))
+        params.setMargins(0, dp(4), 0, dp(4))
         chat.addView(bubble, params)
         scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
     }
@@ -188,8 +224,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         if (result == TextToSpeech.SUCCESS) {
             ttsReady = true
             val languageResult = tts?.setLanguage(Locale("uz", "UZ"))
-            if (languageResult == TextToSpeech.LANG_MISSING_DATA ||
-                languageResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+            if (languageResult == TextToSpeech.LANG_MISSING_DATA || languageResult == TextToSpeech.LANG_NOT_SUPPORTED) {
                 tts?.setLanguage(Locale("ru", "RU"))
             }
         }
