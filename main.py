@@ -65,6 +65,7 @@ memory_lock = threading.RLock()
 server = None
 
 last_answer = ""
+agent_mode_enabled = False
 
 
 # ============================================================
@@ -523,6 +524,12 @@ def ask_orion(question, image_path=None):
                 "content": SYSTEM_PROMPT
             }
         ]
+
+        if agent_mode_enabled:
+            messages.append({
+                "role": "system",
+                "content": "AGENT REJIMI: Vazifani kichik bosqichlarga ajrat, kerakli ma'lumotni izohla, natijani tekshir. Tashqi xizmatda xarid, yuborish, o'chirish, hisobga kirish yoki telefon sozlamasini o'zgartirish kabi amallarni o'zing bajarilgan deb da'vo qilma; avval foydalanuvchidan aniq tasdiq ol."
+            })
 
         with memory_lock:
 
@@ -1014,6 +1021,7 @@ class OrionApp(App):
         return root
 
     def menu_action(self, action):
+        global agent_mode_enabled
         if action == "memory":
             with memory_lock:
                 content = "\\n".join(str(i + 1) + ". " + item for i, item in enumerate(memory)) or "Xotira hozircha bo'sh."
@@ -1030,6 +1038,7 @@ class OrionApp(App):
             popup.open()
         elif action == "agent":
             self.agent_mode = not getattr(self, "agent_mode", False)
+            agent_mode_enabled = self.agent_mode
             self.status.text = "Agent rejimi: " + ("YOQILDI" if self.agent_mode else "O'CHIRILDI")
             self.add_message("ARION", "Agent rejimi yoqildi. Vazifani tahlil qilaman; tashqi amallar oldidan sizdan tasdiq so'rayman." if self.agent_mode else "Agent rejimi o'chirildi.")
         elif action == "weather":
