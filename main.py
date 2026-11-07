@@ -1257,4 +1257,15 @@ if __name__ == "__main__":
         except Exception:
             pass
 
-        raise
+                try:
+            from jnius import autoclass
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            AlertDialog = autoclass("android.app.AlertDialog")
+            activity = PythonActivity.mActivity
+            builder = AlertDialog.Builder(activity)
+            builder.setTitle("ORION XATOSI")
+            builder.setMessage(error[-2500:])
+            builder.setPositiveButton("YOPISH", None)
+            builder.show()
+        except Exception as e:
+            write_log("DIAGNOSTIKA XATOSI: " + str(e))
