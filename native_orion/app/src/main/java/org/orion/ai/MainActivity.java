@@ -53,6 +53,7 @@ public class MainActivity extends Activity {
         LinearLayout root = new LinearLayout(this); root.setOrientation(1); root.setPadding(dp(10),dp(8),dp(10),dp(8)); root.setBackgroundColor(Color.rgb(245,247,252));
         LinearLayout top = new LinearLayout(this); top.setGravity(Gravity.CENTER_VERTICAL);
         TextView title = label("✦ ORION AI", 23); title.setTypeface(null,1); top.addView(title,new LinearLayout.LayoutParams(0,-2,1));
+        top.addView(button("☰ Menyu", this::showMenu));
         top.addView(button("⚙ Sozlamalar", this::settings));
         root.addView(top);
         status = label("Tayyor • Native Android", 12); root.addView(status);
@@ -74,6 +75,8 @@ public class MainActivity extends Activity {
 
     private void addMessage(String who, String text) {
         TextView v = label(who + "\n" + text, 15);
+        v.setTextIsSelectable(true);
+        v.setOnLongClickListener(view -> { new AlertDialog.Builder(this).setTitle(who).setItems(new String[]{"Nusxalash", "Ulashish"}, (d, which) -> { if(which==0){ android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE); cm.setPrimaryClip(android.content.ClipData.newPlainText("ORION", text)); Toast.makeText(this,"Matn nusxalandi",Toast.LENGTH_SHORT).show(); } else { Intent share=new Intent(Intent.ACTION_SEND); share.setType("text/plain"); share.putExtra(Intent.EXTRA_TEXT,text); startActivity(Intent.createChooser(share,"Ulashish")); } }).show(); return true; });
         v.setBackgroundColor(who.equals("Siz") ? Color.rgb(222,236,255) : Color.WHITE);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1,-2); p.setMargins(0,dp(5),0,dp(5)); messages.addView(v,p);
         scroll.post(() -> scroll.fullScroll(View.FOCUS_DOWN));
@@ -125,6 +128,26 @@ public class MainActivity extends Activity {
     private void loadHistory() {
         try { JSONArray a=new JSONArray(prefs.getString("history","[]")); for(int i=0;i<a.length();i++){JSONObject o=a.getJSONObject(i);history.add(o);addMessage(o.optString("role").equals("user")?"Siz":"ORION",o.optString("content"));} } catch(Exception ignored) {}
     }
+
+    private void showMenu() {
+        String[] items = {"＋ Yangi suhbat", "▤ Suhbat tarixini ko‘rish", "🗑 Barcha xabarlarni o‘chirish", "⚙ Sozlamalar", "🔊 Oxirgi javobni eshittirish"};
+        new AlertDialog.Builder(this).setTitle("ORION menyusi").setItems(items,(d,w)->{
+            if(w==0) {
+                history.clear(); messages.removeAllViews();
+                prefs.edit().remove("history").remove("last_answer").apply();
+                addMessage("ORION","Yangi suhbat boshlandi. Sizga qanday yordam beray?");
+            } else if(w==1) {
+                StringBuilder sb=new StringBuilder();
+                synchronized(history){ for(JSONObject h:history){ sb.append(h.optString("role").equals("user")?"Siz: ":"ORION: ").append(h.optString("content")).append("\n\n"); } }
+                ScrollView sv=new ScrollView(this); TextView tv=label(sb.length()==0?"Hozircha suhbat tarixi bo‘sh.":sb.toString(),15); tv.setTextIsSelectable(true); sv.addView(tv);
+                new AlertDialog.Builder(this).setTitle("Suhbat tarixi").setView(sv).setPositiveButton("Yopish",null).show();
+            } else if(w==2) {
+                new AlertDialog.Builder(this).setTitle("Xabarlarni o‘chirish").setMessage("Barcha suhbat va saqlangan tarix o‘chirilsinmi?").setNegativeButton("Bekor qilish",null).setPositiveButton("O‘chirish",(dd,ww)->{history.clear();messages.removeAllViews();prefs.edit().remove("history").remove("last_answer").apply();addMessage("ORION","Suhbat tarixi tozalandi.");}).show();
+            } else if(w==3) settings();
+            else {String s=prefs.getString("last_answer",""); if(!s.isEmpty()) speak(s); else addMessage("ORION","Hali eshittiriladigan javob yo‘q.");}
+        }).show();
+    }
+
     private void settings() {
         LinearLayout box=new LinearLayout(this); box.setPadding(dp(16),dp(8),dp(16),dp(8)); box.setOrientation(1);
         box.addView(label("Groq API kaliti (telefoningizda saqlanadi):",14));
