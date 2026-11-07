@@ -5,7 +5,7 @@ package.name = orion
 package.domain = org.orion.ai
 
 source.dir = .
-source.include_exts = py,png,jpg,jpeg,webp,kv,json
+source.include_exts = py,png,jpg,jpeg,webp,kv,json,txt
 source.exclude_dirs = .git,.github,__pycache__,.buildozer,bin
 
 version = 1.0
