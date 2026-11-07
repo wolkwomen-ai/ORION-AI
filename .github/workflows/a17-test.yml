@@ -1,0 +1,40 @@
+name: ORION A17 Minimal Test APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ant git zip unzip autoconf automake autopoint gettext libtool libtool-bin m4 pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev build-essential
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install buildozer Cython==0.29.34
+      - name: Build minimal A17 test APK
+        working-directory: a17_test
+        run: |
+          yes | buildozer -v android debug
+      - name: Upload test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ORION-A17-TEST-APK
+          path: a17_test/bin/*.apk
+          if-no-files-found: error
