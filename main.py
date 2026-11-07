@@ -1257,7 +1257,7 @@ if __name__ == "__main__":
         except Exception:
             pass
 
-                try:
+        try:
             from jnius import autoclass
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
             AlertDialog = autoclass("android.app.AlertDialog")
