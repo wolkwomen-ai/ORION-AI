@@ -984,17 +984,17 @@ class OrionApp(App):
 
         bottom = BoxLayout(
             size_hint_y=None,
-            height=dp(45)
+            height=dp(45),
+            spacing=dp(5)
         )
 
-        clear = Button(
-            text="SUHBATNI TOZALASH"
-        )
+        memory_button = Button(text="XOTIRA")
+        memory_button.bind(on_release=self.show_memory)
 
-        clear.bind(
-            on_release=self.clear_chat
-        )
+        clear = Button(text="SUHBATNI TOZALASH")
+        clear.bind(on_release=self.clear_chat)
 
+        bottom.add_widget(memory_button)
         bottom.add_widget(clear)
 
         root.add_widget(bottom)
@@ -1175,6 +1175,81 @@ class OrionApp(App):
             args=(self.last_answer,),
             daemon=True
         ).start()
+
+    def show_memory(self, instance):
+        global memory
+
+        layout = BoxLayout(
+            orientation="vertical",
+            padding=dp(8),
+            spacing=dp(6)
+        )
+
+        with memory_lock:
+            saved = list(memory)
+
+        if saved:
+            display_text = "\\n".join(
+                str(i + 1) + ". " + item
+                for i, item in enumerate(saved[-30:])
+            )
+        else:
+            display_text = "Xotira hozircha bo'sh."
+
+        saved_label = Label(
+            text=display_text,
+            size_hint_y=None,
+            halign="left",
+            valign="top"
+        )
+        saved_label.bind(
+            texture_size=lambda obj, size: setattr(obj, "height", size[1] + dp(12))
+        )
+
+        scroll = ScrollView()
+        scroll.add_widget(saved_label)
+        layout.add_widget(scroll)
+
+        note_input = TextInput(
+            hint_text="ARION eslab qolishi kerak bo'lgan ma'lumot...",
+            size_hint_y=None,
+            height=dp(75),
+            multiline=True
+        )
+        layout.add_widget(note_input)
+
+        buttons = BoxLayout(
+            size_hint_y=None,
+            height=dp(45),
+            spacing=dp(5)
+        )
+
+        popup = Popup(
+            title="ARION XOTIRASI",
+            content=layout,
+            size_hint=(0.94, 0.82)
+        )
+
+        def save_note(_):
+            note = note_input.text.strip()
+            if not note:
+                self.status.text = "Avval xotiraga yoziladigan ma'lumotni kiriting."
+                return
+            result = remember(note)
+            self.status.text = result
+            popup.dismiss()
+
+        save_button = Button(text="ESLAB QOL")
+        save_button.bind(on_release=save_note)
+
+        close_button = Button(text="YOPISH")
+        close_button.bind(on_release=popup.dismiss)
+
+        buttons.add_widget(save_button)
+        buttons.add_widget(close_button)
+        layout.add_widget(buttons)
+
+        popup.open()
 
     def clear_chat(self, instance):
 
