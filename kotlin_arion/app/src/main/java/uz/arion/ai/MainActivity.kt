@@ -117,7 +117,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         composer.addView(makeRoundAction("🎙", Color.rgb(235, 235, 235), Color.rgb(45, 45, 45), ::startVoice))
         val sendParams = LinearLayout.LayoutParams(dp(42), dp(42))
         sendParams.setMargins(dp(6), 0, 0, 0)
-        composer.addView(makeRoundAction("↑", Color.rgb(25, 25, 25), Color.WHITE, ::sendMessage), sendParams)
+        composer.addView(makeRoundAction("↑", Color.rgb(10, 132, 255), Color.WHITE, ::sendMessage), sendParams)
         val composerParams = LinearLayout.LayoutParams(-1, -2)
         composerParams.setMargins(0, dp(8), 0, dp(4))
         root.addView(composer, composerParams)
