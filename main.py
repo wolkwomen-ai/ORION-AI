@@ -20,6 +20,7 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from kivy.app import App
+from kivy.core.window import Window
 from kivy.clock import Clock
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
@@ -893,6 +894,9 @@ def start_server():
 class OrionApp(App):
 
     def build(self):
+
+        # Android klaviaturasi ochilganda pastki yozish satri tepaga ko'tarilsin.
+        Window.softinput_mode = "resize"
 
         self.title = APP_NAME
         self.selected_image = None
