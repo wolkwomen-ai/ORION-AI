@@ -13,6 +13,9 @@ import android.view.inputmethod.InputMethodManager
 import android.content.Context
 import android.widget.*
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.view.inputmethod.EditorInfo
+import android.text.InputType
 import java.util.Locale
 
 class MainActivity : Activity(), TextToSpeech.OnInitListener {
@@ -66,17 +69,43 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             gravity = Gravity.CENTER_VERTICAL
         }
         input = EditText(this).apply {
-            hint = "ARIONga yozing..."
+            hint = "Xabar yozing..."
             textSize = 16f
             minLines = 1
-            maxLines = 4
-            setSingleLine(false)
+            maxLines = 5
+            isFocusable = true
+            isFocusableInTouchMode = true
+            isClickable = true
+            showSoftInputOnFocus = true
+            inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
+                InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            imeOptions = EditorInfo.IME_ACTION_SEND
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            background = GradientDrawable().apply {
+                setColor(Color.WHITE)
+                cornerRadius = dp(24).toFloat()
+                setStroke(dp(1), Color.rgb(215, 222, 232))
+            }
+            setOnClickListener {
+                requestFocus()
+                post {
+                    (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                        .showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
+                }
+            }
         }
-        composer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
+        val inputParams = LinearLayout.LayoutParams(0, -2, 1f)
+        inputParams.setMargins(0, 0, dp(6), 0)
+        composer.addView(input, inputParams)
         composer.addView(makeButton("🎙", ::startVoice))
         composer.addView(makeButton("➤", ::sendMessage))
         root.addView(composer)
         setContentView(root)
+        window.setSoftInputMode(
+            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
+                android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
+        )
     }
 
     private fun makeButton(label: String, action: () -> Unit) =
