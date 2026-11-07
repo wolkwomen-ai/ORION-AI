@@ -132,6 +132,7 @@ public class MainActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("ORION sozlamalari").setView(box).setPositiveButton("Saqlash",(d,w)->{String k=keyInput.getText().toString().trim();prefs.edit().putString("api_key",k).apply();addMessage("ORION",k.isEmpty()?"API kaliti o‘chirildi.":"API kaliti telefonda saqlandi.");}).setNegativeButton("Bekor qilish",null).show();
     }
     private void listen() {
+        if (android.os.Build.VERSION.SDK_INT >= 23 && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) { requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, 71); addMessage("ORION","Mikrofon uchun ruxsat so‘raldi. Ruxsat bergach 🎙 ni yana bosing."); return; }
         if(!SpeechRecognizer.isRecognitionAvailable(this)){addMessage("ORION","Bu telefonda nutqni aniqlash xizmati mavjud emas.");return;}
         SpeechRecognizer sr=SpeechRecognizer.createSpeechRecognizer(this);
         Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH); i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM); i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,"uz-UZ"); i.putExtra(RecognizerIntent.EXTRA_PROMPT,"ORIONga gapiring");
