@@ -35,7 +35,7 @@ from kivy.uix.filechooser import FileChooserIconView
 # 1. ASOSIY SOZLAMALAR
 # ============================================================
 
-APP_NAME = "ORION AI ULTIMATE"
+APP_NAME = "ARION AI"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -72,7 +72,7 @@ last_answer = ""
 # ============================================================
 
 SYSTEM_PROMPT = """
-Sen ORION nomli ilg'or shaxsiy sun'iy intellekt yordamchisisan.
+Sen ARION nomli ilg'or shaxsiy sun'iy intellekt yordamchisisan.
 
 ASOSIY VAZIFALARING:
 
@@ -99,7 +99,7 @@ QOIDALAR:
 - Foydalanuvchining administrator huquqini hurmat qil.
 - Javoblaring aniq, tushunarli va foydali bo'lsin.
 
-Sen ORION AI'san.
+Sen ARION AI'san.
 """
 
 
@@ -213,7 +213,7 @@ def remember(text):
 
             save_json(MEMORY_FILE, memory)
 
-    return "Ma'lumot ORION xotirasiga saqlandi."
+    return "Ma'lumot ARION xotirasiga saqlandi."
 
 
 def forget_memory():
@@ -226,7 +226,7 @@ def forget_memory():
 
         save_json(MEMORY_FILE, memory)
 
-    return "ORION xotirasi tozalandi."
+    return "ARION xotirasi tozalandi."
 
 
 load_history()
@@ -638,7 +638,7 @@ def ask_orion(question, image_path=None):
 
     if not answer:
 
-        answer = "ORION bo'sh javob oldi."
+        answer = "ARION bo'sh javob oldi."
 
     saved_question = question or "Foydalanuvchi rasm yubordi."
 
@@ -757,7 +757,7 @@ class OrionServer(BaseHTTPRequestHandler):
                 200,
                 {
                     "ok": True,
-                    "name": "ORION AI",
+                    "name": "ARION AI",
                     "status": "online"
                 }
             )
@@ -909,7 +909,7 @@ class OrionApp(App):
         self.root_box = root
 
         title = Label(
-            text="[b]ORION AI ULTIMATE[/b]",
+            text="[b]ARION AI[/b]",
             markup=True,
             size_hint_y=None,
             height=dp(45),
@@ -919,7 +919,7 @@ class OrionApp(App):
         root.add_widget(title)
 
         self.status = Label(
-            text="ORION tayyor.",
+            text="ARION tayyor.",
             size_hint_y=None,
             height=dp(32)
         )
@@ -944,7 +944,7 @@ class OrionApp(App):
         root.add_widget(self.scroll)
 
         self.input = TextInput(
-            hint_text="ORIONga savol yozing...",
+            hint_text="ARIONga savol yozing...",
             size_hint_y=None,
             height=dp(90),
             multiline=True
@@ -1054,7 +1054,7 @@ class OrionApp(App):
             question or "[Rasm]"
         )
 
-        self.status.text = "ORION o'ylayapti..."
+        self.status.text = "ARION o'ylayapti..."
 
         threading.Thread(
             target=self.get_answer,
@@ -1092,7 +1092,7 @@ class OrionApp(App):
             answer
         )
 
-        self.status.text = "ORION tayyor."
+        self.status.text = "ARION tayyor."
 
     def show_error(self, error):
 
@@ -1204,7 +1204,7 @@ class OrionApp(App):
 if __name__ == "__main__":
 
     print("=" * 45)
-    print("ORION AI ULTIMATE")
+    print("ARION AI")
     print("Tizim ishga tushmoqda...")
     print("=" * 45)
 
@@ -1263,7 +1263,7 @@ if __name__ == "__main__":
             AlertDialog = autoclass("android.app.AlertDialog")
             activity = PythonActivity.mActivity
             builder = AlertDialog.Builder(activity)
-            builder.setTitle("ORION XATOSI")
+            builder.setTitle("ARION XATOSI")
             builder.setMessage(error[-2500:])
             builder.setPositiveButton("YOPISH", None)
             builder.show()
