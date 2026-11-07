@@ -987,7 +987,7 @@ class OrionApp(App):
             on_release=self.choose_image
         )
 
-        voice = Button(text="OVOZ")
+        voice = Button(text="OVOZ CHIQARISH")
 
         voice.bind(
             on_release=self.play_voice
@@ -1024,7 +1024,7 @@ class OrionApp(App):
         global agent_mode_enabled
         if action == "memory":
             with memory_lock:
-                content = "\\n".join(str(i + 1) + ". " + item for i, item in enumerate(memory)) or "Xotira hozircha bo'sh."
+                content = "\n".join(str(i + 1) + ". " + item for i, item in enumerate(memory)) or "Xotira hozircha bo'sh."
             box = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(8))
             view = ScrollView()
             label = Label(text=content, size_hint_y=None, halign="left", valign="top")
@@ -1228,7 +1228,7 @@ class OrionApp(App):
         self.last_answer = answer
 
         self.add_message(
-            "ORION",
+            "ARION",
             answer
         )
 
