@@ -17,6 +17,8 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.inputmethod.EditorInfo
 import android.text.InputType
+import android.text.Editable
+import android.text.TextWatcher
 import java.util.Locale
 
 class MainActivity : Activity(), TextToSpeech.OnInitListener {
@@ -30,6 +32,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var recordingFile: File? = null
     private var isRecording = false
     private lateinit var sendButton: TextView
+    private lateinit var micButton: View
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -117,12 +120,34 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 }
             }
         }
-        composer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
-        composer.addView(makeMicAction(::startRecording))
-        val sendParams = LinearLayout.LayoutParams(dp(42), dp(42))
-        sendParams.setMargins(dp(6), 0, 0, 0)
-        sendButton = makeRoundAction("↑", Color.rgb(10, 132, 255), Color.WHITE, ::sendOrStop)
+        val plusButton = makeRoundAction("+", Color.rgb(235, 235, 235), Color.rgb(35, 35, 35)) {
+            Toast.makeText(this, "Qo‘shimcha imkoniyatlar keyingi bosqichda qo‘shiladi", Toast.LENGTH_SHORT).show()
+        }
+        plusButton.textSize = 28f
+        composer.addView(plusButton, LinearLayout.LayoutParams(dp(40), dp(40)))
+
+        val inputParams = LinearLayout.LayoutParams(0, -2, 1f)
+        inputParams.setMargins(dp(4), 0, dp(4), 0)
+        composer.addView(input, inputParams)
+
+        micButton = makeMicAction(::startRecording)
+        composer.addView(micButton)
+        val sendParams = LinearLayout.LayoutParams(dp(40), dp(40))
+        sendButton = makeRoundAction("↑", Color.rgb(20, 20, 20), Color.WHITE, ::sendOrStop)
+        sendButton.visibility = View.GONE
         composer.addView(sendButton, sendParams)
+
+        input.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                if (!isRecording) {
+                    val hasText = !s.isNullOrBlank()
+                    micButton.visibility = if (hasText) View.GONE else View.VISIBLE
+                    sendButton.visibility = if (hasText) View.VISIBLE else View.GONE
+                }
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
         val composerParams = LinearLayout.LayoutParams(-1, -2)
         composerParams.setMargins(0, dp(8), 0, dp(4))
         root.addView(composer, composerParams)
@@ -237,6 +262,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             addMessage("Siz", "🎙 Ovozli xabar yozildi: " + (recordingFile?.name ?: "audio"))
             addMessage("ARION", "Ovoz yozuvi saqlandi. Ovozli xabarni AI orqali tinglab javob berish uchun server ulanishi hali kerak.")
             sendButton.text = "↑"
+            sendButton.visibility = View.GONE
+            micButton.visibility = if (input.text.isNullOrBlank()) View.VISIBLE else View.GONE
             status.text = "AI yordamchi"
             return
         }
@@ -263,8 +290,10 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             recorder = newRecorder
             recordingFile = file
             isRecording = true
+            micButton.visibility = View.GONE
+            sendButton.visibility = View.VISIBLE
             sendButton.text = "〰"
-            status.text = "● Ovoz yozilmoqda… To‘xtatish uchun ko‘k tugmani bosing"
+            status.text = "● Ovoz yozilmoqda… To‘xtatish uchun tugmani bosing"
         } catch (e: Exception) {
             isRecording = false
             recorder?.release()
@@ -299,6 +328,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val message = input.text.toString().trim()
         if (message.isEmpty()) return
         input.setText("")
+        micButton.visibility = View.VISIBLE
+        sendButton.visibility = View.GONE
         (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
             .hideSoftInputFromWindow(input.windowToken, 0)
         addMessage("Siz", message)
