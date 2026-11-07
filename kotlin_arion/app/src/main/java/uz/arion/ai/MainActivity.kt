@@ -135,7 +135,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         composer.addView(micButton)
         val sendParams = LinearLayout.LayoutParams(dp(40), dp(40))
         sendButton = makeRoundAction("↑", Color.rgb(16, 163, 127), Color.WHITE, ::sendOrStop)
-        sendButton.visibility = View.GONE
+        sendButton.visibility = View.VISIBLE
         composer.addView(sendButton, sendParams)
 
         input.addTextChangedListener(object : TextWatcher {
@@ -143,8 +143,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 if (!isListening) {
                     val hasText = !s.isNullOrBlank()
-                    micButton.visibility = if (hasText) View.GONE else View.VISIBLE
-                    sendButton.visibility = if (hasText) View.VISIBLE else View.GONE
+                    // Mikrofon va yuborish tugmalari matn bor-yo‘qligidan qat’i nazar ko‘rinib turadi.
+                micButton.visibility = View.VISIBLE
+                sendButton.visibility = View.VISIBLE
                 }
             }
             override fun afterTextChanged(s: Editable?) {}
@@ -295,7 +296,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                         status.text = "AI yordamchi"
                         if (input.text.isNullOrBlank()) {
                             micButton.visibility = View.VISIBLE
-                            sendButton.visibility = View.GONE
+                            sendButton.visibility = View.VISIBLE
                         }
                         if (error != android.speech.SpeechRecognizer.ERROR_NO_MATCH &&
                             error != android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
@@ -312,8 +313,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                         }
                         status.text = "AI yordamchi"
                         micButton.invalidate()
-                        micButton.visibility = if (input.text.isNullOrBlank()) View.VISIBLE else View.GONE
-                        sendButton.visibility = if (input.text.isNullOrBlank()) View.GONE else View.VISIBLE
+                        micButton.visibility = View.VISIBLE
+                        sendButton.visibility = View.VISIBLE
                     }
                     override fun onPartialResults(partialResults: Bundle?) {}
                     override fun onEvent(eventType: Int, params: Bundle?) {}
@@ -352,7 +353,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         if (message.isEmpty()) return
         input.setText("")
         micButton.visibility = View.VISIBLE
-        sendButton.visibility = View.GONE
+        sendButton.visibility = View.VISIBLE
         (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
             .hideSoftInputFromWindow(input.windowToken, 0)
         addMessage("Siz", message)
