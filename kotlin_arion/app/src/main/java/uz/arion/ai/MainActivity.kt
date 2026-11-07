@@ -89,7 +89,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             setTextColor(Color.rgb(25, 35, 55))
             setPadding(dp(14), dp(10), dp(14), dp(10))
             setBackgroundColor(if (who == "Siz") Color.rgb(220, 235, 255) else Color.WHITE)
-            isTextSelectable = true
+            setTextIsSelectable(true)
         }
         val params = LinearLayout.LayoutParams(-1, -2)
         params.setMargins(0, dp(5), 0, dp(5))
