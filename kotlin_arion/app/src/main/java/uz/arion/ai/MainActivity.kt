@@ -305,29 +305,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         addMessage("ARION", "Xabaringiz qabul qilindi. Keyingi bosqichda AI serveriga ulaymiz.")
     }
 
-    private fun startVoice() {
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 702)
-            return
-        }
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "uz-UZ")
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "ARIONga gapiring")
-        }
-        try { startActivityForResult(intent, voiceRequest) }
-        catch (_: Exception) { addMessage("ARION", "Ovozli tanish xizmati telefonda mavjud emas.") }
-    }
-
-    @Deprecated("Legacy activity result API kept for broad Android compatibility")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == voiceRequest && resultCode == RESULT_OK) {
-            val spoken = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-            if (!spoken.isNullOrBlank()) { input.setText(spoken); sendMessage() }
-        }
-    }
-
     override fun onInit(result: Int) {
         if (result == TextToSpeech.SUCCESS) {
             ttsReady = true
