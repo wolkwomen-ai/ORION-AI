@@ -895,9 +895,7 @@ class OrionApp(App):
     def build(self):
 
         self.title = APP_NAME
-
         self.selected_image = None
-
         self.last_answer = ""
 
         root = BoxLayout(
@@ -905,103 +903,156 @@ class OrionApp(App):
             padding=dp(8),
             spacing=dp(6)
         )
-
         self.root_box = root
 
-        title = Label(
-            text="[b]ARION AI[/b]",
-            markup=True,
-            size_hint_y=None,
-            height=dp(45),
-            font_size="22sp"
-        )
-
-        root.add_widget(title)
+        header = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
+        title = Label(text="[b]ARION AI[/b]", markup=True, font_size="22sp")
+        memory_button = Button(text="XOTIRA", size_hint_x=None, width=dp(88))
+        memory_button.bind(on_release=self.show_memory)
+        clear = Button(text="⋮", size_hint_x=None, width=dp(44))
+        clear.bind(on_release=self.show_chat_menu)
+        header.add_widget(title)
+        header.add_widget(memory_button)
+        header.add_widget(clear)
+        root.add_widget(header)
 
         self.status = Label(
             text="ARION tayyor.",
             size_hint_y=None,
-            height=dp(32)
+            height=dp(26),
+            font_size="12sp"
         )
-
         root.add_widget(self.status)
 
         self.scroll = ScrollView()
-
         self.chat = BoxLayout(
             orientation="vertical",
             size_hint_y=None,
-            spacing=dp(8),
-            padding=dp(5)
+            spacing=dp(10),
+            padding=[dp(5), dp(8), dp(5), dp(8)]
         )
-
-        self.chat.bind(
-            minimum_height=self.chat.setter("height")
-        )
-
+        self.chat.bind(minimum_height=self.chat.setter("height"))
         self.scroll.add_widget(self.chat)
-
         root.add_widget(self.scroll)
 
+        # ChatGPT uslubidagi pastki yozish satri
+        composer = BoxLayout(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=dp(58),
+            spacing=dp(5),
+            padding=[dp(5), dp(5), dp(5), dp(5)]
+        )
+        self.composer = composer
+
+        self.attach_button = Button(
+            text="+",
+            size_hint_x=None,
+            width=dp(44),
+            font_size="27sp",
+            background_normal="",
+            background_color=(0.20, 0.22, 0.25, 1)
+        )
+        self.attach_button.bind(on_release=self.show_attachment_menu)
+
         self.input = TextInput(
-            hint_text="ARIONga savol yozing...",
+            hint_text="Xabar yozish…",
+            multiline=False,
             size_hint_y=None,
-            height=dp(90),
-            multiline=True
+            height=dp(46),
+            padding=[dp(10), dp(13), dp(8), dp(8)],
+            background_normal="",
+            background_active="",
+            background_color=(0.14, 0.15, 0.17, 1),
+            foreground_color=(1, 1, 1, 1),
+            hint_text_color=(0.65, 0.67, 0.70, 1),
+            cursor_color=(1, 1, 1, 1)
         )
+        self.input.bind(text=self.update_composer_action)
+        self.input.bind(on_text_validate=self.send_message)
 
-        root.add_widget(self.input)
-
-        row = BoxLayout(
-            size_hint_y=None,
-            height=dp(48),
-            spacing=dp(5)
+        self.action_button = Button(
+            text="🎙",
+            size_hint_x=None,
+            width=dp(48),
+            font_size="22sp",
+            background_normal="",
+            background_color=(0.20, 0.22, 0.25, 1)
         )
+        self.action_button.bind(on_release=self.composer_action)
 
-        send = Button(text="YUBORISH")
-
-        send.bind(
-            on_release=self.send_message
-        )
-
-        photo = Button(text="RASM")
-
-        photo.bind(
-            on_release=self.choose_image
-        )
-
-        voice = Button(text="OVOZ")
-
-        voice.bind(
-            on_release=self.play_voice
-        )
-
-        row.add_widget(send)
-        row.add_widget(photo)
-        row.add_widget(voice)
-
-        root.add_widget(row)
-
-        bottom = BoxLayout(
-            size_hint_y=None,
-            height=dp(45),
-            spacing=dp(5)
-        )
-
-        memory_button = Button(text="XOTIRA")
-        memory_button.bind(on_release=self.show_memory)
-
-        clear = Button(text="SUHBATNI TOZALASH")
-        clear.bind(on_release=self.clear_chat)
-
-        bottom.add_widget(memory_button)
-        bottom.add_widget(clear)
-
-        root.add_widget(bottom)
+        composer.add_widget(self.attach_button)
+        composer.add_widget(self.input)
+        composer.add_widget(self.action_button)
+        root.add_widget(composer)
 
         start_server()
-
         return root
+
+    def update_composer_action(self, instance, value):
+        self.action_button.text = "➤" if value.strip() else "🎙"
+
+    def composer_action(self, instance):
+        if self.input.text.strip():
+            self.send_message(instance)
+        else:
+            self.show_voice_screen(instance)
+
+    def show_attachment_menu(self, instance):
+        layout = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(10))
+        popup = Popup(title="Qo‘shimcha", content=layout, size_hint=(0.82, 0.32))
+        image_button = Button(text="🖼  Rasm tanlash")
+        image_button.bind(on_release=lambda *_: (popup.dismiss(), self.choose_image(None)))
+        close_button = Button(text="Yopish")
+        close_button.bind(on_release=popup.dismiss)
+        layout.add_widget(image_button)
+        layout.add_widget(close_button)
+        popup.open()
+
+    def show_chat_menu(self, instance):
+        layout = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(10))
+        popup = Popup(title="Suhbat", content=layout, size_hint=(0.82, 0.30))
+        memory_button = Button(text="XOTIRA")
+        memory_button.bind(on_release=lambda *_: (popup.dismiss(), self.show_memory(None)))
+        clear_button = Button(text="SUHBATNI TOZALASH")
+        clear_button.bind(on_release=lambda *_: (popup.dismiss(), self.clear_chat(None)))
+        close_button = Button(text="Yopish")
+        close_button.bind(on_release=popup.dismiss)
+        layout.add_widget(memory_button)
+        layout.add_widget(clear_button)
+        layout.add_widget(close_button)
+        popup.open()
+
+    def show_voice_screen(self, instance):
+        # Hozircha ovozli suhbat oynasi. Mikrofonni haqiqiy tinglashga
+        # ulash uchun Android SpeechRecognizer va RECORD_AUDIO ruxsati kerak.
+        layout = BoxLayout(orientation="vertical", spacing=dp(14), padding=dp(16))
+        voice_circle = Label(
+            text="●",
+            font_size="76sp",
+            color=(0.35, 0.65, 1, 1),
+            size_hint_y=0.65
+        )
+        caption = Label(
+            text="ARION bilan ovozli suhbat",
+            font_size="18sp",
+            size_hint_y=None,
+            height=dp(42)
+        )
+        info = Label(
+            text="Ovozli suhbat oynasi tayyor. Mikrofon orqali tinglash keyingi bosqichda ulanadi.",
+            halign="center",
+            valign="middle"
+        )
+        info.bind(size=lambda obj, size: setattr(obj, "text_size", size))
+        close_button = Button(text="YOPISH", size_hint_y=None, height=dp(46))
+        layout.add_widget(voice_circle)
+        layout.add_widget(caption)
+        layout.add_widget(info)
+        layout.add_widget(close_button)
+        popup = Popup(title="ARION VOICE", content=layout, size_hint=(0.86, 0.68))
+        close_button.bind(on_release=popup.dismiss)
+        popup.open()
 
     def add_message(self, title, message):
 
