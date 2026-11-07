@@ -114,7 +114,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             }
         }
         composer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
-        composer.addView(makeRoundAction("🎙", Color.rgb(235, 235, 235), Color.rgb(45, 45, 45), ::startVoice))
+        composer.addView(makeMicAction(::startVoice))
         val sendParams = LinearLayout.LayoutParams(dp(42), dp(42))
         sendParams.setMargins(dp(6), 0, 0, 0)
         composer.addView(makeRoundAction("↑", Color.rgb(10, 132, 255), Color.WHITE, ::sendMessage), sendParams)
@@ -150,6 +150,45 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
                 android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
         )
+    }
+
+    private fun makeMicAction(action: () -> Unit): View {
+        return object : View(this) {
+            private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.rgb(35, 35, 35)
+                style = android.graphics.Paint.Style.STROKE
+                strokeWidth = dp(2).toFloat()
+                strokeCap = android.graphics.Paint.Cap.ROUND
+                strokeJoin = android.graphics.Paint.Join.ROUND
+            }
+            init {
+                layoutParams = LinearLayout.LayoutParams(dp(40), dp(40))
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(Color.rgb(235, 235, 235))
+                }
+                setOnClickListener { action() }
+                contentDescription = "Mikrofon"
+            }
+            override fun onDraw(canvas: android.graphics.Canvas) {
+                super.onDraw(canvas)
+                val cx = width / 2f
+                val cy = height / 2f
+                canvas.drawRoundRect(
+                    cx - dp(4), cy - dp(10), cx + dp(4), cy + dp(4),
+                    dp(4).toFloat(), dp(4).toFloat(), paint
+                )
+                val path = android.graphics.Path().apply {
+                    moveTo(cx - dp(9), cy)
+                    cubicTo(cx - dp(9), cy + dp(13), cx + dp(9), cy + dp(13), cx + dp(9), cy)
+                    moveTo(cx, cy + dp(10))
+                    lineTo(cx, cy + dp(15))
+                    moveTo(cx - dp(5), cy + dp(15))
+                    lineTo(cx + dp(5), cy + dp(15))
+                }
+                canvas.drawPath(path, paint)
+            }
+        }
     }
 
     private fun makeRoundAction(label: String, fill: Int, foreground: Int, action: () -> Unit) =
