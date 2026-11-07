@@ -5,7 +5,8 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.speech.RecognizerIntent
+import android.media.MediaRecorder
+import java.io.File
 import android.speech.tts.TextToSpeech
 import android.view.Gravity
 import android.view.View
@@ -25,7 +26,10 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var status: TextView
     private var tts: TextToSpeech? = null
     private var ttsReady = false
-    private val voiceRequest = 701
+    private var recorder: MediaRecorder? = null
+    private var recordingFile: File? = null
+    private var isRecording = false
+    private lateinit var sendButton: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -114,10 +118,11 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             }
         }
         composer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
-        composer.addView(makeMicAction(::startVoice))
+        composer.addView(makeMicAction(::startRecording))
         val sendParams = LinearLayout.LayoutParams(dp(42), dp(42))
         sendParams.setMargins(dp(6), 0, 0, 0)
-        composer.addView(makeRoundAction("↑", Color.rgb(10, 132, 255), Color.WHITE, ::sendMessage), sendParams)
+        sendButton = makeRoundAction("↑", Color.rgb(10, 132, 255), Color.WHITE, ::sendOrStop)
+        composer.addView(sendButton, sendParams)
         val composerParams = LinearLayout.LayoutParams(-1, -2)
         composerParams.setMargins(0, dp(8), 0, dp(4))
         root.addView(composer, composerParams)
@@ -224,6 +229,70 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         params.setMargins(0, dp(4), 0, dp(4))
         chat.addView(bubble, params)
         scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
+    }
+
+    private fun sendOrStop() {
+        if (isRecording) {
+            stopRecording()
+            addMessage("Siz", "🎙 Ovozli xabar yozildi: " + (recordingFile?.name ?: "audio"))
+            addMessage("ARION", "Ovoz yozuvi saqlandi. Ovozli xabarni AI orqali tinglab javob berish uchun server ulanishi hali kerak.")
+            sendButton.text = "↑"
+            status.text = "AI yordamchi"
+            return
+        }
+        sendMessage()
+    }
+
+    private fun startRecording() {
+        if (isRecording) return
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 702)
+            return
+        }
+        try {
+            val file = File(cacheDir, "arion_voice_" + System.currentTimeMillis() + ".m4a")
+            val newRecorder = if (android.os.Build.VERSION.SDK_INT >= 31) MediaRecorder(this) else MediaRecorder()
+            newRecorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+            newRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            newRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            newRecorder.setAudioEncodingBitRate(128000)
+            newRecorder.setAudioSamplingRate(44100)
+            newRecorder.setOutputFile(file.absolutePath)
+            newRecorder.prepare()
+            newRecorder.start()
+            recorder = newRecorder
+            recordingFile = file
+            isRecording = true
+            sendButton.text = "〰"
+            status.text = "● Ovoz yozilmoqda… To‘xtatish uchun ko‘k tugmani bosing"
+        } catch (e: Exception) {
+            isRecording = false
+            recorder?.release()
+            recorder = null
+            addMessage("ARION", "Mikrofonni ishga tushirib bo‘lmadi: " + (e.localizedMessage ?: "xatolik"))
+        }
+    }
+
+    private fun stopRecording() {
+        if (!isRecording) return
+        try {
+            recorder?.stop()
+        } catch (_: RuntimeException) {
+            recordingFile?.delete()
+        } finally {
+            recorder?.release()
+            recorder = null
+            isRecording = false
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 702 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            startRecording()
+        } else if (requestCode == 702) {
+            addMessage("ARION", "Ovoz yozish uchun mikrofon ruxsatini yoqing.")
+        }
     }
 
     private fun sendMessage() {
