@@ -1,6 +1,10 @@
 name: ORION Native Android APK
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - 'native_orion/**'
+      - '.github/workflows/native-orion.yml'
 permissions:
   contents: read
 jobs:
