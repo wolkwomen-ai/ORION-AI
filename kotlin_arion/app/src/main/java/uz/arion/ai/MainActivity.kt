@@ -101,7 +101,32 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         composer.addView(makeButton("🎙", ::startVoice))
         composer.addView(makeButton("➤", ::sendMessage))
         root.addView(composer)
+
+        // Keep the chat composer above both the keyboard and Android navigation bar.
+        root.setOnApplyWindowInsetsListener { view, insets ->
+            val left: Int
+            val top: Int
+            val right: Int
+            val bottom: Int
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                val bars = insets.getInsets(android.view.WindowInsets.Type.systemBars())
+                val ime = insets.getInsets(android.view.WindowInsets.Type.ime())
+                left = bars.left
+                top = bars.top
+                right = bars.right
+                bottom = maxOf(bars.bottom, ime.bottom)
+            } else {
+                left = insets.systemWindowInsetLeft
+                top = insets.systemWindowInsetTop
+                right = insets.systemWindowInsetRight
+                bottom = insets.systemWindowInsetBottom
+            }
+            view.setPadding(dp(12) + left, dp(8) + top, dp(12) + right, dp(8) + bottom)
+            insets
+        }
+
         setContentView(root)
+        root.requestApplyInsets()
         window.setSoftInputMode(
             android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
                 android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
