@@ -1,6 +1,6 @@
 [app]
 
-title = ORION AI
+title = ARION AI
 package.name = orion
 package.domain = org.orion.ai
 
@@ -8,7 +8,7 @@ source.dir = .
 source.include_exts = py,png,jpg,jpeg,webp,kv,json,txt
 source.exclude_dirs = .git,.github,__pycache__,.buildozer,bin
 
-version = 1.0
+version = 1.1
 
 requirements = python3==3.12.10,hostpython3==3.12.10,kivy,requests
 
