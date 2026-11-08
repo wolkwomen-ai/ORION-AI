@@ -652,11 +652,11 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private fun showVoicePanel() {
         voiceDock?.let { root.removeView(it) }
         voiceDock = null
+        // Ovoz oynasi butun ekran bo‘ylab: tashqi karta/ramka chizilmaydi.
         val scrim = FrameLayout(this).apply {
             setBackgroundColor(Color.WHITE)
             clipChildren = false
             clipToPadding = false
-            background = null
         }
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -710,11 +710,17 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
         val footer = FrameLayout(this)
         footer.addView(hint, FrameLayout.LayoutParams(-1, dp(58), Gravity.CENTER))
-        footer.addView(actionText("×", Color.rgb(245,245,245), Color.DKGRAY, 28) {
-            closeVoiceMode()
-        }, FrameLayout.LayoutParams(dp(52), dp(52), Gravity.RIGHT or Gravity.CENTER_VERTICAL))
         column.addView(footer, LinearLayout.LayoutParams(-1, dp(64)))
         scrim.addView(column, FrameLayout.LayoutParams(-1, -1))
+
+        // X tugmasi dumaloq shar yoki ichki panelga emas, ekranning past-o‘ng
+        // burchagiga biriktiriladi.
+        scrim.addView(actionText("×", Color.rgb(245,245,245), Color.DKGRAY, 28) {
+            closeVoiceMode()
+        }, FrameLayout.LayoutParams(dp(52), dp(52), Gravity.RIGHT or Gravity.BOTTOM).apply {
+            rightMargin = dp(18)
+            bottomMargin = dp(18)
+        })
         voicePanel = scrim
         root.addView(scrim, FrameLayout.LayoutParams(-1, -1))
     }
