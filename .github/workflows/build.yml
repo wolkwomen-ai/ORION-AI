@@ -1,4 +1,3 @@
-# Rebuild trigger: 2026-11-07
 name: ARION Kotlin APK Build
 
 on:
@@ -28,13 +27,29 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Prepare permanent signing key
+        env:
+          ARION_KEYSTORE_BASE64: ${{ secrets.ARION_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ARION_KEYSTORE_BASE64" ]; then
+            echo "::error::Add the ARION_KEYSTORE_BASE64 repository secret before building."
+            exit 1
+          fi
+          echo "$ARION_KEYSTORE_BASE64" | base64 --decode > "$GITHUB_WORKSPACE/arion-upload-key.p12"
+          test -s "$GITHUB_WORKSPACE/arion-upload-key.p12"
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Build Kotlin Android APK
+      - name: Build signed Kotlin APK
         working-directory: kotlin_arion
+        env:
+          ARION_KEYSTORE_PATH: ${{ github.workspace }}/arion-upload-key.p12
+          ARION_STORE_PASSWORD: ${{ secrets.ARION_STORE_PASSWORD }}
+          ARION_KEY_PASSWORD: ${{ secrets.ARION_KEY_PASSWORD }}
+          ARION_KEY_ALIAS: arion-upload
         run: gradle :app:assembleDebug --no-daemon
 
       - name: Upload ARION APK
