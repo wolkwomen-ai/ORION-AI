@@ -797,7 +797,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             val core = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 shader = android.graphics.RadialGradient(
                     cx, cy, radius * 0.30f,
-                    intArrayOf(Color.WHITE, 0xCC8DEBFF, 0x008DEBFF),
+                    intArrayOf(Color.WHITE, 0xCC8DEBFF.toInt(), 0x008DEBFF.toInt()),
                     null, android.graphics.Shader.TileMode.CLAMP
                 )
             }
