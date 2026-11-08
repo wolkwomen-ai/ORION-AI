@@ -807,7 +807,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             val coreRadius = 7.2f + lastRms.coerceIn(0f, 12f) * 0.18f
             glowPaint.shader = android.graphics.RadialGradient(
                 0f, 10f, coreRadius * 2.5f,
-                intArrayOf(Color.WHITE, 0xFF72D8FF.toInt(), 0x003B9DFF),
+                intArrayOf(Color.WHITE, 0xFF72D8FF.toInt(), 0x003B9DFF.toInt()),
                 floatArrayOf(0f, 0.36f, 1f), android.graphics.Shader.TileMode.CLAMP
             )
             canvas.drawCircle(0f, 10f, coreRadius * 2.5f, glowPaint)
