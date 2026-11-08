@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs>
+ <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071b3b"/><stop offset=".55" stop-color="#123f78"/><stop offset="1" stop-color="#07152f"/></linearGradient>
+ <radialGradient id="orb" cx="34%" cy="25%" r="78%"><stop stop-color="#e5fbff"/><stop offset=".28" stop-color="#9ce5ff"/><stop offset=".65" stop-color="#42a9ed"/><stop offset="1" stop-color="#1763b8"/></radialGradient>
+ <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffffff"/><stop offset=".35" stop-color="#a8efff"/><stop offset=".7" stop-color="#54c9ff"/><stop offset="1" stop-color="#e7fdff"/></linearGradient>
+ <radialGradient id="glow"><stop stop-color="#75dcff" stop-opacity=".55"/><stop offset="1" stop-color="#75dcff" stop-opacity="0"/></radialGradient>
+ <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="18"/></filter>
+ <filter id="shine" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+ <clipPath id="clip"><circle cx="512" cy="492" r="286"/></clipPath>
+</defs>
+<rect width="1024" height="1024" rx="224" fill="url(#bg)"/>
+<circle cx="512" cy="492" r="390" fill="url(#glow)" filter="url(#soft)"/>
+<g opacity=".42" fill="#d8f6ff"><circle cx="205" cy="260" r="5"/><circle cx="790" cy="235" r="4"/><circle cx="840" cy="650" r="5"/><circle cx="245" cy="740" r="3"/><circle cx="690" cy="145" r="3"/></g>
+<circle cx="512" cy="492" r="286" fill="url(#orb)"/>
+<g clip-path="url(#clip)" opacity=".7" fill="#f2fdff">
+ <path d="M170 410c35-54 92-61 132-35 19-63 92-88 143-49 36-53 115-50 145 9 65-12 115 36 108 91 44 12 68 49 57 88H154c-24-34-15-82 16-104z" opacity=".43"/>
+ <path d="M255 572c29-36 72-40 100-18 20-44 73-57 109-29 30-39 86-35 109 9 46-7 80 27 75 66H238c-10-10-4-22 17-28z" opacity=".27"/>
+ <path d="M355 294c38-22 83-8 98 26 28-28 75-23 94 11 32-9 62 10 66 40H322c-4-32 9-62 33-77z" opacity=".28"/>
+</g>
+<circle cx="512" cy="492" r="301" fill="none" stroke="#bcefff" stroke-opacity=".28" stroke-width="3"/>
+<g fill="none" stroke="url(#ring)" stroke-linecap="round" stroke-linejoin="round" filter="url(#shine)">
+ <path d="M280 685C190 542 246 324 402 230c136-82 316-42 397 89" stroke-width="13" opacity=".88"/>
+ <path d="M744 328c94 144 47 347-101 447-135 92-319 57-407-76" stroke-width="13" opacity=".88"/>
+ <!-- A is hidden in the orbital geometry -->
+ <path d="M350 690L510 305Q518 286 527 307L684 690" stroke-width="8" opacity=".38"/>
+ <path d="M425 514Q512 478 610 514" stroke-width="7" opacity=".32"/>
+</g>
+<circle cx="280" cy="685" r="13" fill="#eaffff" filter="url(#shine)"/>
+<circle cx="799" cy="319" r="10" fill="#eaffff" filter="url(#shine)"/>
+<circle cx="512" cy="492" r="286" fill="none" stroke="#e7fbff" stroke-opacity=".38" stroke-width="5"/>
+</svg>
