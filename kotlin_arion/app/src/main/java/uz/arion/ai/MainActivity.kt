@@ -496,15 +496,15 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 val messages = org.json.JSONArray()
                 messages.put(JSONObject()
                     .put("role", "system")
-                    .put("content", "Sen ARION nomli ilg‘or shaxsiy sun’iy intellekt yordamchisisan. Foydalanuvchiga o‘zbek tilida ravon, aniq va foydali javob ber. Bilmagan narsangni to‘qima. Kod so‘ralsa to‘liq va ishlatishga tayyor kod ber. API kalitlarni oshkor qilma."))
-                val from = maxOf(0, saved.length() - 30)
+                    .put("content", "Sen ARION nomli ilg‘or shaxsiy sun’iy intellekt yordamchisisan. Foydalanuvchiga o‘zbek tilida ravon, aniq va foydali javob ber. O‘zbek imlosida o‘ va g‘ harflarini to‘g‘ri yoz. Oddiy savollarga ixcham javob ber, batafsil so‘ralsa keng tushuntir. Bilmagan narsangni to‘qima. Kod so‘ralsa to‘liq va ishlatishga tayyor kod ber. API kalitlarni oshkor qilma."))
+                val from = maxOf(0, saved.length() - 16)
                 for (i in from until saved.length()) messages.put(saved.getJSONObject(i))
                 messages.put(JSONObject().put("role", "user").put("content", question))
                 val payload = JSONObject()
                     .put("model", "qwen/qwen3.8-27b")
                     .put("messages", messages)
                     .put("temperature", 0.6)
-                    .put("max_completion_tokens", 2500)
+                    .put("max_completion_tokens", 1400)
                 val conn = (URL("https://api.groq.com/openai/v1/chat/completions").openConnection() as HttpURLConnection)
                 conn.requestMethod = "POST"
                 conn.connectTimeout = 15000
@@ -761,23 +761,35 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         catch (_: Exception) { status.text = "Mikrofonni qayta yoqish uchun 🎙 bosing" }
     }
 
-    // Edge TTS: aynan uz-UZ-MadinaNeural ovozida MP3 tayyorlaydi.
+    // O‘zbekcha o‘ va g‘ harflarini Edge TTS uchun yagona imloga keltiramiz.
+    private fun normalizeUzbekSpeech(text: String): String {
+        return text.replace(Regex("(?i)(o|g)[‘’ʻʼ\\u02BB\\u02BC\\u0060']")) { match ->
+            match.groupValues[1] + "ʻ"
+        }
+    }
+
+    // Edge TTS: Madina ovozi, biroz tezroq talaffuz va ishonchli MP3 ijrosi.
     private fun speak(text: String) {
+        val speechText = normalizeUzbekSpeech(text).take(3500)
         status.text = "Madina ovozi tayyorlanmoqda…"
         thread {
             try {
                 val voice = TTSVoice.provides()
                     .firstOrNull { it.shortName == "uz-UZ-MadinaNeural" }
-                    ?: throw IllegalStateException("uz-UZ-MadinaNeural ovozi ro‘yxatda topilmadi")
+                    ?: throw IllegalStateException("uz-UZ-MadinaNeural ovozi topilmadi")
 
-                val audio = EdgeTTS(voice, text.take(3500))
-                    .voiceRate("-5%")
+                val audio = EdgeTTS(voice, speechText)
+                    .voiceRate("+5%")
                     .formatMp3()
                     .transToAudioStream()
-                    ?: throw IllegalStateException("Edge TTS bo‘sh audio qaytardi")
+                    ?: throw IllegalStateException("Edge TTS audio qaytarmadi")
 
+                val audioBytes = audio.toByteArray()
+                if (audioBytes.size < 1000) {
+                    throw IllegalStateException("Ovoz fayli bo‘sh yoki to‘liq kelmadi")
+                }
                 val audioFile = java.io.File(cacheDir, "arion_madina.mp3")
-                audioFile.writeBytes(audio.toByteArray())
+                audioFile.writeBytes(audioBytes)
 
                 runOnUiThread {
                     if (isFinishing) return@runOnUiThread
@@ -785,6 +797,12 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                         edgePlayer?.setOnCompletionListener(null)
                         edgePlayer?.release()
                         edgePlayer = MediaPlayer().apply {
+                            setAudioAttributes(
+                                android.media.AudioAttributes.Builder()
+                                    .setUsage(android.media.AudioAttributes.USAGE_ASSISTANT)
+                                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                                    .build()
+                            )
                             setDataSource(audioFile.absolutePath)
                             setOnPreparedListener { player ->
                                 status.text = "Madina gapiryapti…"
@@ -800,31 +818,37 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                                 player.release()
                                 if (edgePlayer === player) edgePlayer = null
                                 status.text = "Ovozni ijro etib bo‘lmadi"
-                                if (liveMode) resumeLiveListening()
+                                speakWithPhoneVoice(speechText)
                                 true
                             }
                             prepareAsync()
                         }
                     } catch (e: Exception) {
                         status.text = "MP3 ijro xatosi: ${e.localizedMessage}"
-                        resumeLiveListening()
+                        speakWithPhoneVoice(speechText)
                     }
                 }
             } catch (e: Exception) {
                 runOnUiThread {
-                    status.text = "Edge TTS xatosi: ${e.localizedMessage}"
-                    // Edge xizmati vaqtincha ishlamasa, suhbat uzilib qolmasin.
-                    if (ttsReady) {
-                        tts?.speak(text.take(3500), TextToSpeech.QUEUE_FLUSH, null, "arion-fallback")
-                        root.postDelayed({
-                            status.text = ""
-                            if (liveMode && !waitingForAnswer) resumeLiveListening()
-                        }, (text.length.coerceAtMost(3500) * 65L).coerceIn(1800L, 18000L))
-                    } else if (liveMode) {
-                        resumeLiveListening()
-                    }
+                    status.text = "Madina ovozi ulanmayapti — zaxira ovoz ishga tushmoqda"
+                    speakWithPhoneVoice(speechText)
                 }
             }
+        }
+    }
+
+    // Edge TTS ishlamasa ham javob ovozsiz qolmasligi uchun telefon TTS zaxirasi.
+    private fun speakWithPhoneVoice(text: String) {
+        try {
+            if (ttsReady) tts?.setSpeechRate(1.05f)
+            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "arion-fallback")
+            root.postDelayed({
+                if (status.text.toString().contains("zaxira ovoz")) status.text = ""
+                if (liveMode && !waitingForAnswer) resumeLiveListening()
+            }, (text.length.coerceAtMost(3500) * 65L).coerceIn(1800L, 18000L))
+        } catch (e: Exception) {
+            status.text = "Ovoz chiqarish xatosi: ${e.localizedMessage}"
+            if (liveMode) resumeLiveListening()
         }
     }
 
