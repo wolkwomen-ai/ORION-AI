@@ -14,7 +14,6 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.speech.tts.TextToSpeech
 import android.media.MediaPlayer
 import io.github.whitemagic2014.tts.TTS as EdgeTTS
 import io.github.whitemagic2014.tts.TTSVoice
@@ -32,11 +31,10 @@ import org.json.JSONObject
 import org.json.JSONArray
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.Locale
 import kotlin.concurrent.thread
 import kotlin.math.abs
 
-class MainActivity : Activity(), TextToSpeech.OnInitListener {
+class MainActivity : Activity() {
     private lateinit var root: FrameLayout
     private lateinit var chat: LinearLayout
     private lateinit var scroll: ScrollView
@@ -46,8 +44,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var sendButton: TextView
     private lateinit var voiceButton: TextView
     private var recognizer: SpeechRecognizer? = null
-    private var tts: TextToSpeech? = null
-    private var ttsReady = false
+    private var lastUserQuestion = ""
     private var edgePlayer: MediaPlayer? = null
     private var listening = false
     private var liveMode = false
@@ -80,7 +77,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
             WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
-        tts = TextToSpeech(this, this)
         buildScreen()
         addMessage("ARION", "Assalomu alaykum! Men ARIONman. Sizga qanday yordam beray?")
         if (getSharedPreferences("arion_config", Context.MODE_PRIVATE).getString("groq_api_key", "").isNullOrBlank()) {
@@ -252,8 +248,62 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             ))
         }
         val lp = LinearLayout.LayoutParams(-1, -2)
-        lp.setMargins(dp(2), dp(4), dp(2), dp(4))
+        lp.setMargins(dp(2), dp(4), dp(2), dp(0))
         chat.addView(row, lp)
+
+        if (!isUser) {
+            val actions = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                setPadding(dp(0), dp(0), dp(0), dp(0))
+            }
+            fun actionIcon(icon: String, description: String, onClick: () -> Unit) {
+                val item = TextView(this@MainActivity).apply {
+                    text = icon
+                    textSize = 18f
+                    gravity = Gravity.CENTER
+                    setTextColor(Color.rgb(115, 115, 115))
+                    minWidth = dp(34)
+                    minHeight = dp(34)
+                    setPadding(dp(5), dp(3), dp(5), dp(3))
+                    contentDescription = description
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener { onClick() }
+                }
+                actions.addView(item, LinearLayout.LayoutParams(dp(38), dp(34)))
+            }
+            actionIcon("▢", "Nusxa olish") {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("ARION javobi", message))
+                Toast.makeText(this, "Matn nusxalandi", Toast.LENGTH_SHORT).show()
+            }
+            actionIcon("◖))", "Ovoz chiqarib o‘qish") { speak(message) }
+            actionIcon("＋", "Yoqdi") {
+                Toast.makeText(this, "Fikringiz qabul qilindi", Toast.LENGTH_SHORT).show()
+            }
+            actionIcon("－", "Yoqmadi") {
+                Toast.makeText(this, "Fikringiz qabul qilindi", Toast.LENGTH_SHORT).show()
+            }
+            actionIcon("↗", "Ulashish") {
+                try {
+                    val share = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, message)
+                    }
+                    startActivity(Intent.createChooser(share, "Javobni ulashish"))
+                } catch (_: Exception) {
+                    Toast.makeText(this, "Ulashish oynasi ochilmadi", Toast.LENGTH_SHORT).show()
+                }
+            }
+            actionIcon("↻", "Qayta javob olish") {
+                val question = lastUserQuestion
+                if (question.isNotBlank() && !waitingForAnswer) askBackend(question, true)
+            }
+            val actionLp = LinearLayout.LayoutParams(-1, -2)
+            actionLp.setMargins(dp(0), dp(0), dp(0), dp(5))
+            chat.addView(actions, actionLp)
+        }
         scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
     }
 
@@ -433,6 +483,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         if (question.isEmpty() || waitingForAnswer) return
         input.setText("")
         hideKeyboard()
+        lastUserQuestion = question
         addMessage("Siz", question)
         askBackend(question, true)
     }
@@ -590,6 +641,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     val phrase = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
                     if (phrase.isNotBlank()) {
                         if (liveMode) {
+                            lastUserQuestion = phrase
                             addMessage("Siz", phrase)
                             askBackend(phrase, true)
                         } else {
@@ -779,7 +831,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     ?: throw IllegalStateException("uz-UZ-MadinaNeural ovozi topilmadi")
 
                 val audio = EdgeTTS(voice, speechText)
-                    .voiceRate("+5%")
+                    .voiceRate("+10%")
                     .formatMp3()
                     .transToAudioStream()
                     ?: throw IllegalStateException("Edge TTS audio qaytarmadi")
@@ -817,38 +869,23 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                             setOnErrorListener { player, _, _ ->
                                 player.release()
                                 if (edgePlayer === player) edgePlayer = null
-                                status.text = "Ovozni ijro etib bo‘lmadi"
-                                speakWithPhoneVoice(speechText)
+                                status.text = "Madina ovozini ijro etib bo‘lmadi"
+                                if (liveMode && !waitingForAnswer) resumeLiveListening()
                                 true
                             }
                             prepareAsync()
                         }
                     } catch (e: Exception) {
-                        status.text = "MP3 ijro xatosi: ${e.localizedMessage}"
-                        speakWithPhoneVoice(speechText)
+                        status.text = "Madina ovozini ijro etish xatosi: ${e.localizedMessage}"
+                        if (liveMode && !waitingForAnswer) resumeLiveListening()
                     }
                 }
             } catch (e: Exception) {
                 runOnUiThread {
-                    status.text = "Madina ovozi ulanmayapti — zaxira ovoz ishga tushmoqda"
-                    speakWithPhoneVoice(speechText)
+                    status.text = "Madina ovozi ishlamadi: ${e.localizedMessage ?: "noma’lum xato"}"
+                    if (liveMode && !waitingForAnswer) resumeLiveListening()
                 }
             }
-        }
-    }
-
-    // Edge TTS ishlamasa ham javob ovozsiz qolmasligi uchun telefon TTS zaxirasi.
-    private fun speakWithPhoneVoice(text: String) {
-        try {
-            if (ttsReady) tts?.setSpeechRate(1.05f)
-            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "arion-fallback")
-            root.postDelayed({
-                if (status.text.toString().contains("zaxira ovoz")) status.text = ""
-                if (liveMode && !waitingForAnswer) resumeLiveListening()
-            }, (text.length.coerceAtMost(3500) * 65L).coerceIn(1800L, 18000L))
-        } catch (e: Exception) {
-            status.text = "Ovoz chiqarish xatosi: ${e.localizedMessage}"
-            if (liveMode) resumeLiveListening()
         }
     }
 
@@ -857,7 +894,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         voicePaused = false
         listening = false
         try { recognizer?.cancel() } catch (_: Exception) {}
-        tts?.stop()
         voicePanel?.let { root.removeView(it) }
         voicePanel = null
         voiceDock?.let { root.removeView(it) }
@@ -884,21 +920,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
     }
 
-    override fun onInit(result: Int) {
-        if (result == TextToSpeech.SUCCESS) {
-            ttsReady = true
-            val code = tts?.setLanguage(Locale("uz", "UZ"))
-            if (code == TextToSpeech.LANG_MISSING_DATA || code == TextToSpeech.LANG_NOT_SUPPORTED) {
-                tts?.setLanguage(Locale("ru", "RU"))
-            }
-        }
-    }
-
     override fun onDestroy() {
         liveMode = false
         try { recognizer?.destroy() } catch (_: Exception) {}
-        tts?.stop()
-        tts?.shutdown()
         try { edgePlayer?.stop() } catch (_: Exception) {}
         edgePlayer?.release()
         edgePlayer = null
