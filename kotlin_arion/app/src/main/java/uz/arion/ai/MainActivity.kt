@@ -675,7 +675,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         column.addView(header)
         val center = FrameLayout(this)
         orb = OrbView(this)
-        center.addView(orb, FrameLayout.LayoutParams(dp(270), dp(270), Gravity.CENTER))
+        center.addView(orb, FrameLayout.LayoutParams(dp(320), dp(320), Gravity.CENTER))
         var dragStartY = 0f
         center.setOnTouchListener { _, event ->
             when (event.action) {
@@ -895,51 +895,61 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
     private inner class OrbView(context: Context) : View(context) {
         private val glow = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val cloud = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-        private val highlight = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-        private val blue = Color.rgb(55, 119, 245)
-        private val lightBlue = Color.rgb(112, 170, 255)
-        private val deepBlue = Color.rgb(35, 91, 220)
+        private val orbPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = dp(2).toFloat()
+        }
+        private val highlight = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val blue = Color.rgb(42, 112, 255)
+        private val paleBlue = Color.rgb(142, 196, 255)
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             val t = System.currentTimeMillis() / 1000.0
-            val w = width.toFloat()
-            val h = height.toFloat()
-            val scale = (minOf(w, h) / dp(190).toFloat()).coerceAtLeast(0.25f)
-            val cx = w / 2f
-            val cy = h / 2f + (kotlin.math.sin(t * 1.35).toFloat() * dp(5) * scale)
-            val pulse = 1f + (kotlin.math.sin(t * 2.1).toFloat() * 0.045f)
-            val rms = lastRms.coerceIn(0f, 12f) / 12f
-            val cloudW = dp(76).toFloat() * scale * pulse * (1f + rms * .12f)
-            val cloudH = dp(34).toFloat() * scale * pulse
+            val cx = width / 2f
+            val cy = height / 2f
+            val base = minOf(width, height) * 0.355f
+            val voice = (lastRms.coerceIn(0f, 12f) / 12f)
+            val pulse = 1f + kotlin.math.sin(t * 2.0).toFloat() * 0.045f + voice * 0.10f
+            val radius = base * pulse
 
-            // Yumshoq ko‘k nur.
-            glow.color = 0x443B82F6
-            canvas.drawCircle(cx, cy, cloudW * 1.55f, glow)
-            canvas.drawCircle(cx, cy, cloudW * 1.18f, glow)
-
-            // Bulutning pastki tanasi va suzib yuradigan yumaloq bo‘laklari.
-            cloud.color = blue
-            canvas.drawRoundRect(
-                cx - cloudW, cy - cloudH * .22f,
-                cx + cloudW, cy + cloudH * .62f,
-                cloudH * .42f, cloudH * .42f, cloud
+            // Katta ko‘k nur — alohida dumaloq animatsiya, ramkasiz.
+            glow.shader = android.graphics.RadialGradient(
+                cx, cy, radius * 2.05f,
+                intArrayOf(0x66549BFF, 0x33549BFF, 0x00549BFF),
+                floatArrayOf(0f, 0.58f, 1f),
+                android.graphics.Shader.TileMode.CLAMP
             )
-            val drift1 = (kotlin.math.sin(t * 1.1).toFloat() * dp(3) * scale)
-            val drift2 = (kotlin.math.cos(t * 1.35).toFloat() * dp(3) * scale)
-            cloud.color = lightBlue
-            canvas.drawCircle(cx - cloudW * .48f + drift1, cy - cloudH * .18f, cloudH * .62f, cloud)
-            canvas.drawCircle(cx + drift2, cy - cloudH * .60f, cloudH * .78f, cloud)
-            cloud.color = deepBlue
-            canvas.drawCircle(cx + cloudW * .48f - drift1, cy - cloudH * .12f, cloudH * .58f, cloud)
+            canvas.drawCircle(cx, cy, radius * 2.05f, glow)
+            glow.shader = null
 
-            highlight.color = 0x66FFFFFF
+            // Ovozga qarab yengil kengayadigan tashqi halqa.
+            ringPaint.color = 0x553B82F6
+            ringPaint.strokeWidth = dp(3).toFloat()
+            canvas.drawCircle(cx, cy, radius * (1.22f + voice * 0.10f), ringPaint)
+
+            // Markaziy dumaloq ko‘k shar.
+            orbPaint.shader = android.graphics.RadialGradient(
+                cx - radius * 0.30f, cy - radius * 0.38f, radius * 1.55f,
+                intArrayOf(0xFFB9DCFF.toInt(), 0xFF5A9BFF.toInt(), 0xFF2464E8.toInt(), 0xFF173EA8.toInt()),
+                floatArrayOf(0f, 0.32f, 0.72f, 1f),
+                android.graphics.Shader.TileMode.CLAMP
+            )
+            canvas.drawCircle(cx, cy, radius, orbPaint)
+            orbPaint.shader = null
+
+            // Yorug‘lik aks-sadosi.
+            highlight.color = 0x668FFFFFF
             canvas.drawOval(
-                cx - cloudW * .45f, cy - cloudH * .48f,
-                cx + cloudW * .08f, cy - cloudH * .30f, highlight
+                cx - radius * 0.58f, cy - radius * 0.62f,
+                cx + radius * 0.02f, cy - radius * 0.34f,
+                highlight
             )
-            postInvalidateDelayed(40)
+
+            // Sekin suzish va nafas olish harakati.
+            translationY = kotlin.math.sin(t * 1.25).toFloat() * dp(5)
+            postInvalidateDelayed(32)
         }
     }
 }
