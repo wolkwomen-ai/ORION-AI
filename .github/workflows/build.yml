@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - main
+      - feature/edge-tts-v2
     paths:
       - 'kotlin_arion/**'
       - '.github/workflows/build.yml'
