@@ -8,6 +8,7 @@ on:
     paths:
       - 'main.py'
       - 'buildozer.spec'
+      - 'assets/**'
       - '.github/workflows/build.yml'
 
 permissions:
@@ -30,10 +31,16 @@ jobs:
       - name: Install Android build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip             autoconf libtool pkg-config zlib1g-dev libncurses5-dev             libncursesw5-dev cmake libffi-dev libssl-dev
+          sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip librsvg2-bin autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev
           python3 -m pip install --user --upgrade pip setuptools wheel
           python3 -m pip install --user buildozer cython==0.29.36
           echo "$(python3 -m site --user-base)/bin" >> "$GITHUB_PATH"
+
+      - name: Generate ARION launcher icon
+        run: |
+          mkdir -p assets
+          rsvg-convert -w 1024 -h 1024 assets/arion_icon.svg -o assets/arion_icon.png
+          test -s assets/arion_icon.png
 
       - name: Build ARION APK
         env:
