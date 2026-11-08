@@ -239,7 +239,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             isFocusable = true
             setOnClickListener {
                 root.removeView(scrim)
-                newChat()
+                this@MainActivity.newChat()
             }
         }
         drawer.addView(newChat, LinearLayout.LayoutParams(-1, dp(52)).apply {
