@@ -6,7 +6,7 @@ android {
     namespace 'uz.arion.ai'
     compileSdk 35
     defaultConfig {
-        applicationId 'uz.arion.ai'
+        applicationId 'uz.arion.ai.test'
         minSdk 26
         targetSdk 35
         versionCode 1
