@@ -152,8 +152,12 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             }
             elevation = dp(1).toFloat()
         }
-        val plus = actionText("+", Color.rgb(235,235,235), Color.rgb(35,35,35), 27) {
-            Toast.makeText(this, "Qo‘shimcha imkoniyatlar keyingi bosqichda ulanadi", Toast.LENGTH_SHORT).show()
+        val plus = actionText("+", Color.rgb(235,235,235), Color.rgb(35,35,35), 27) { anchor ->
+            val menu = PopupMenu(this@MainActivity, anchor)
+            menu.menu.add("Rasm tanlash").setOnMenuItemClickListener { chooseImage(); true }
+            menu.menu.add("Xotira").setOnMenuItemClickListener { openMemory(); true }
+            menu.menu.add("Yangi suhbat").setOnMenuItemClickListener { newChat(); true }
+            menu.show()
         }
         composer.addView(plus, LinearLayout.LayoutParams(dp(40), dp(40)))
 
@@ -672,6 +676,19 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val center = FrameLayout(this)
         orb = OrbView(this)
         center.addView(orb, FrameLayout.LayoutParams(dp(270), dp(270), Gravity.CENTER))
+        var dragStartY = 0f
+        center.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> { dragStartY = event.rawY; true }
+                MotionEvent.ACTION_UP -> {
+                    val delta = event.rawY - dragStartY
+                    if (delta > dp(65)) dockVoicePanel()
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> true
+                else -> true
+            }
+        }
         column.addView(center, LinearLayout.LayoutParams(-1, 0, 1f))
         val hint = TextView(this).apply {
             text = "Gapiring — ARION tinglayapti"
@@ -741,7 +758,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
         voiceDock = dock
         root.addView(dock, FrameLayout.LayoutParams(-1, dp(72), Gravity.BOTTOM).apply {
-            leftMargin = dp(12); rightMargin = dp(12); bottomMargin = dp(12)
+            leftMargin = dp(12); rightMargin = dp(12)
+            // Dock yozish panelini yopmasligi uchun uning tepasida turadi.
+            bottomMargin = dp(76)
         })
     }
 
@@ -875,27 +894,52 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private inner class OrbView(context: Context) : View(context) {
-        private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(16,163,127); style = Paint.Style.FILL }
-        private val glow = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x3310A37F; style = Paint.Style.FILL }
-        private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE; style = Paint.Style.STROKE; strokeWidth = dp(4).toFloat(); strokeCap = Paint.Cap.ROUND
-        }
+        private val glow = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val cloud = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+        private val highlight = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+        private val blue = Color.rgb(55, 119, 245)
+        private val lightBlue = Color.rgb(112, 170, 255)
+        private val deepBlue = Color.rgb(35, 91, 220)
+
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
-            val cx = width / 2f
-            val cy = height / 2f
-            val radius = dp(48).toFloat() + lastRms.coerceIn(0f, 12f) * dp(1).toFloat()
-            canvas.drawCircle(cx, cy, radius + dp(18).toFloat(), glow)
-            canvas.drawCircle(cx, cy, radius, fill)
-            val path = Path()
-            for (i in 0..4) {
-                val x = cx + (i - 2) * dp(13)
-                val h = dp(10).toFloat() + (lastRms.coerceIn(0f, 12f) * dp(2).toFloat()) * (if (i % 2 == 0) 1f else .65f)
-                if (i == 0) path.moveTo(x, cy - h) else path.lineTo(x, cy - h)
-                path.lineTo(x, cy + h)
-            }
-            canvas.drawPath(path, line)
-            postInvalidateDelayed(120)
+            val t = System.currentTimeMillis() / 1000.0
+            val w = width.toFloat()
+            val h = height.toFloat()
+            val scale = (minOf(w, h) / dp(190).toFloat()).coerceAtLeast(0.25f)
+            val cx = w / 2f
+            val cy = h / 2f + (kotlin.math.sin(t * 1.35) * dp(5) * scale).toFloat()
+            val pulse = 1f + (kotlin.math.sin(t * 2.1) * 0.045f)
+            val rms = lastRms.coerceIn(0f, 12f) / 12f
+            val cloudW = dp(76).toFloat() * scale * pulse * (1f + rms * .12f)
+            val cloudH = dp(34).toFloat() * scale * pulse
+
+            // Yumshoq ko‘k nur.
+            glow.color = 0x443B82F6
+            canvas.drawCircle(cx, cy, cloudW * 1.55f, glow)
+            canvas.drawCircle(cx, cy, cloudW * 1.18f, glow)
+
+            // Bulutning pastki tanasi va suzib yuradigan yumaloq bo‘laklari.
+            cloud.color = blue
+            canvas.drawRoundRect(
+                cx - cloudW, cy - cloudH * .22f,
+                cx + cloudW, cy + cloudH * .62f,
+                cloudH * .42f, cloudH * .42f, cloud
+            )
+            val drift1 = (kotlin.math.sin(t * 1.1) * dp(3) * scale).toFloat()
+            val drift2 = (kotlin.math.cos(t * 1.35) * dp(3) * scale).toFloat()
+            cloud.color = lightBlue
+            canvas.drawCircle(cx - cloudW * .48f + drift1, cy - cloudH * .18f, cloudH * .62f, cloud)
+            canvas.drawCircle(cx + drift2, cy - cloudH * .60f, cloudH * .78f, cloud)
+            cloud.color = deepBlue
+            canvas.drawCircle(cx + cloudW * .48f - drift1, cy - cloudH * .12f, cloudH * .58f, cloud)
+
+            highlight.color = 0x66FFFFFF
+            canvas.drawOval(
+                cx - cloudW * .45f, cy - cloudH * .48f,
+                cx + cloudW * .08f, cy - cloudH * .30f, highlight
+            )
+            postInvalidateDelayed(40)
         }
     }
 }
