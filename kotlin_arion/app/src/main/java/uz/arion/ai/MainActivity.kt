@@ -695,27 +695,116 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private inner class OrbView(context: Context) : View(context) {
-        private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(16,163,127); style = Paint.Style.FILL }
-        private val glow = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x3310A37F; style = Paint.Style.FILL }
-        private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE; style = Paint.Style.STROKE; strokeWidth = dp(4).toFloat(); strokeCap = Paint.Cap.ROUND
+        private var rotation = 0f
+        private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val spherePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = dp(2).toFloat()
+            color = Color.rgb(111, 220, 255)
+            alpha = 210
         }
+        private val networkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = dp(1).toFloat()
+            color = Color.rgb(190, 244, 255)
+            alpha = 155
+        }
+        private val nodePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            color = Color.WHITE
+        }
+        private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
+            color = Color.WHITE
+            alpha = 125
+        }
+
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             val cx = width / 2f
             val cy = height / 2f
-            val radius = dp(48).toFloat() + lastRms.coerceIn(0f, 12f) * dp(1).toFloat()
-            canvas.drawCircle(cx, cy, radius + dp(18).toFloat(), glow)
-            canvas.drawCircle(cx, cy, radius, fill)
-            val path = Path()
-            for (i in 0..4) {
-                val x = cx + (i - 2) * dp(13)
-                val h = dp(10).toFloat() + (lastRms.coerceIn(0f, 12f) * dp(2).toFloat()) * (if (i % 2 == 0) 1f else .65f)
-                if (i == 0) path.moveTo(x, cy - h) else path.lineTo(x, cy - h)
-                path.lineTo(x, cy + h)
+            val base = minOf(width, height) * 0.31f
+            val radius = base + lastRms.coerceIn(0f, 12f) * dp(0.35f)
+            val glowRadius = radius * 1.48f
+
+            glowPaint.shader = android.graphics.RadialGradient(
+                cx, cy, glowRadius,
+                intArrayOf(0x663ABEFF, 0x22318BFF, Color.TRANSPARENT),
+                floatArrayOf(0f, 0.58f, 1f), android.graphics.Shader.TileMode.CLAMP
+            )
+            canvas.drawCircle(cx, cy, glowRadius, glowPaint)
+
+            spherePaint.shader = android.graphics.RadialGradient(
+                cx - radius * 0.34f, cy - radius * 0.38f, radius * 1.55f,
+                intArrayOf(
+                    Color.rgb(218, 250, 255),
+                    Color.rgb(69, 190, 255),
+                    Color.rgb(20, 91, 190),
+                    Color.rgb(5, 25, 76)
+                ),
+                floatArrayOf(0f, 0.28f, 0.68f, 1f),
+                android.graphics.Shader.TileMode.CLAMP
+            )
+            canvas.drawCircle(cx, cy, radius, spherePaint)
+            spherePaint.shader = null
+
+            val save = canvas.save()
+            canvas.rotate(rotation, cx, cy)
+            val orbit = android.graphics.RectF(
+                cx - radius * 1.34f, cy - radius * 0.43f,
+                cx + radius * 1.34f, cy + radius * 0.43f
+            )
+            ringPaint.alpha = 210
+            canvas.drawOval(orbit, ringPaint)
+            canvas.rotate(62f, cx, cy)
+            canvas.drawOval(orbit, ringPaint)
+            canvas.restoreToCount(save)
+
+            // Neural network: luminous nodes and connecting paths on the sphere.
+            val points = arrayOf(
+                Pair(-0.62f, -0.30f), Pair(-0.28f, -0.58f), Pair(0.18f, -0.52f),
+                Pair(0.58f, -0.24f), Pair(-0.48f, 0.12f), Pair(-0.08f, 0.02f),
+                Pair(0.36f, 0.12f), Pair(-0.26f, 0.53f), Pair(0.22f, 0.52f),
+                Pair(0.63f, 0.42f)
+            )
+            val links = arrayOf(
+                intArrayOf(0,1), intArrayOf(1,2), intArrayOf(2,3), intArrayOf(0,4),
+                intArrayOf(4,5), intArrayOf(5,6), intArrayOf(6,3), intArrayOf(4,7),
+                intArrayOf(7,8), intArrayOf(8,9), intArrayOf(5,8), intArrayOf(2,6)
+            )
+            val coords = points.map { Pair(cx + it.first * radius, cy + it.second * radius) }
+            val networkSave = canvas.save()
+            canvas.rotate(rotation * 0.42f, cx, cy)
+            links.forEach { link ->
+                val a = coords[link[0]]
+                val b = coords[link[1]]
+                canvas.drawLine(a.first, a.second, b.first, b.second, networkPaint)
             }
-            canvas.drawPath(path, line)
-            postInvalidateDelayed(120)
+            coords.forEachIndexed { index, point ->
+                val r = if (index == 5) dp(4).toFloat() else dp(2.6f)
+                canvas.drawCircle(point.first, point.second, r + dp(2), glowPaint)
+                canvas.drawCircle(point.first, point.second, r, nodePaint)
+            }
+            canvas.restoreToCount(networkSave)
+
+            // Soft glass highlight and a bright central energy core.
+            val shine = android.graphics.RectF(
+                cx - radius * 0.68f, cy - radius * 0.78f,
+                cx - radius * 0.08f, cy - radius * 0.20f
+            )
+            canvas.drawOval(shine, highlightPaint)
+            val core = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = android.graphics.RadialGradient(
+                    cx, cy, radius * 0.30f,
+                    intArrayOf(Color.WHITE, 0xCC8DEBFF, 0x008DEBFF),
+                    null, android.graphics.Shader.TileMode.CLAMP
+                )
+            }
+            canvas.drawCircle(cx, cy, radius * 0.30f, core)
+
+            rotation = (rotation + 0.65f + lastRms.coerceIn(0f, 12f) * 0.025f) % 360f
+            postInvalidateDelayed(32)
         }
     }
 }
