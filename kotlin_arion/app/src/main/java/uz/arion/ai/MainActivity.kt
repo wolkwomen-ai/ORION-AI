@@ -52,6 +52,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var waitingForAnswer = false
     private var pendingVoiceMode = false
     private var voicePaused = false
+    private var agentMode = false
+    private var pendingTxtContent = ""
+    private var pendingTxtName = "arion_eslatma.txt"
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun rounded(color: Int, radius: Int): GradientDrawable =
@@ -89,6 +92,13 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val menu = actionText("☰", Color.WHITE, Color.rgb(35,35,35), 24) {
             val popup = PopupMenu(this@MainActivity, it)
             popup.menu.add("Yangi suhbat").setOnMenuItemClickListener { newChat(); true }
+            popup.menu.add("Rasm tanlash").setOnMenuItemClickListener { chooseImage(); true }
+            popup.menu.add("Xotira").setOnMenuItemClickListener { openMemory(); true }
+            popup.menu.add("Agent rejimi").setOnMenuItemClickListener { toggleAgentMode(); true }
+            popup.menu.add("Ob-havo").setOnMenuItemClickListener { openWeather(); true }
+            popup.menu.add("TXT fayl yaratish").setOnMenuItemClickListener { createTxtFile(); true }
+            popup.menu.add("Internet qidiruvi").setOnMenuItemClickListener { openInternetSearch(); true }
+            popup.menu.add("Telefon sozlamalari").setOnMenuItemClickListener { openPhoneSettings(); true }
             popup.menu.add("Ovozli suhbat").setOnMenuItemClickListener { openVoiceMode(); true }
             popup.show()
         }
@@ -102,8 +112,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             text = "AI yordamchi"; textSize = 11f; setTextColor(Color.GRAY); gravity = Gravity.CENTER
         })
         header.addView(titleBox, LinearLayout.LayoutParams(0, -2, 1f))
-        val newChat = actionText("✎", Color.WHITE, Color.rgb(35,35,35), 22) { newChat() }
-        header.addView(newChat, LinearLayout.LayoutParams(dp(48), dp(48)))
+        val memoryButton = actionText("◉", Color.WHITE, Color.rgb(16,163,127), 23) { openMemory() }
+        header.addView(memoryButton, LinearLayout.LayoutParams(dp(48), dp(48)))
         page.addView(header)
 
         scroll = ScrollView(this).apply { isFillViewport = true; clipToPadding = false }
@@ -231,6 +241,172 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         lp.setMargins(dp(2), dp(4), dp(2), dp(4))
         chat.addView(row, lp)
         scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
+    }
+
+    private fun toggleAgentMode() {
+        agentMode = !agentMode
+        val message = if (agentMode) {
+            "Agent rejimi yoqildi. Murakkab topshiriqlar uchun rejim tanlandi."
+        } else {
+            "Agent rejimi o'chirildi."
+        }
+        status.text = message
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+
+    private fun openMemory() {
+        val prefs = getSharedPreferences("arion_memory", Context.MODE_PRIVATE)
+        val editor = EditText(this).apply {
+            hint = "ARION eslab qolishi kerak bo'lgan ma'lumotlar"
+            setText(prefs.getString("notes", "").orEmpty())
+            minLines = 4
+            maxLines = 8
+            textSize = 16f
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(4))
+            addView(TextView(this@MainActivity).apply {
+                text = "Bu eslatmalar telefon xotirasida saqlanadi."
+                textSize = 13f
+                setTextColor(Color.GRAY)
+            })
+            addView(editor)
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("ARION XOTIRASI")
+            .setView(box)
+            .setPositiveButton("SAQLASH") { _, _ ->
+                prefs.edit().putString("notes", editor.text.toString()).apply()
+                Toast.makeText(this, "Xotira saqlandi", Toast.LENGTH_SHORT).show()
+            }
+            .setNeutralButton("TOZALASH") { _, _ ->
+                prefs.edit().remove("notes").apply()
+                Toast.makeText(this, "Xotira tozalandi", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("YOPISH", null)
+            .show()
+    }
+
+    private fun openWeather() {
+        val uri = android.net.Uri.parse("https://www.google.com/search?q=bugungi+ob-havo")
+        startActivity(Intent(Intent.ACTION_VIEW, uri))
+    }
+
+    private fun openInternetSearch() {
+        val queryInput = EditText(this).apply {
+            hint = "Nimani qidiramiz?"
+            textSize = 16f
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("INTERNET QIDIRUVI")
+            .setView(queryInput)
+            .setPositiveButton("QIDIRISH") { _, _ ->
+                val query = queryInput.text.toString().trim()
+                if (query.isNotEmpty()) {
+                    val uri = android.net.Uri.parse(
+                        "https://www.google.com/search?q=" + android.net.Uri.encode(query)
+                    )
+                    startActivity(Intent(Intent.ACTION_VIEW, uri))
+                }
+            }
+            .setNegativeButton("BEKOR", null)
+            .show()
+    }
+
+    private fun openPhoneSettings() {
+        try {
+            startActivity(Intent(android.provider.Settings.ACTION_SETTINGS))
+        } catch (_: Exception) {
+            Toast.makeText(this, "Telefon sozlamalari ochilmadi", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun createTxtFile() {
+        val nameInput = EditText(this).apply {
+            hint = "Fayl nomi"
+            setText("arion_eslatma")
+            textSize = 16f
+        }
+        val bodyInput = EditText(this).apply {
+            hint = "Fayl matni"
+            minLines = 4
+            maxLines = 10
+            gravity = Gravity.TOP
+            textSize = 16f
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(4))
+            addView(nameInput)
+            addView(bodyInput)
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("TXT FAYL YARATISH")
+            .setView(box)
+            .setPositiveButton("SAQLASH") { _, _ ->
+                var name = nameInput.text.toString().trim().ifEmpty { "arion_eslatma" }
+                name = name.replace(Regex("[^A-Za-z0-9_-]"), "_")
+                if (!name.endsWith(".txt")) name += ".txt"
+                pendingTxtName = name
+                pendingTxtContent = bodyInput.text.toString()
+                val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TITLE, pendingTxtName)
+                }
+                try {
+                    startActivityForResult(intent, 705)
+                } catch (e: Exception) {
+                    Toast.makeText(this, "TXT saqlash oynasi ochilmadi", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("BEKOR", null)
+            .show()
+    }
+
+    private fun chooseImage() {
+        val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            type = "image/*"
+            addCategory(Intent.CATEGORY_OPENABLE)
+        }
+        try {
+            startActivityForResult(Intent.createChooser(intent, "Rasm tanlash"), 704)
+        } catch (_: Exception) {
+            Toast.makeText(this, "Rasm tanlash ochilmadi", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun handleMenuActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (resultCode != Activity.RESULT_OK || data?.data == null) return
+        val uri = data.data!!
+        when (requestCode) {
+            704 -> {
+                Toast.makeText(
+                    this,
+                    "Rasm tanlandi. Hozirgi server versiyasida rasm tahlili ulanmagan.",
+                    Toast.LENGTH_LONG
+                ).show()
+                addMessage("ARION", "Rasm tanlandi. Rasmni tahlil qilish uchun tasvirni serverga yuborish funksiyasi kerak.")
+            }
+            705 -> {
+                try {
+                    contentResolver.openOutputStream(uri)?.use { output ->
+                        output.write(pendingTxtContent.toByteArray(Charsets.UTF_8))
+                    } ?: throw IllegalStateException("Faylni yozish oqimi ochilmadi")
+                    Toast.makeText(this, "TXT fayl saqlandi: $pendingTxtName", Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    Toast.makeText(this, "TXT saqlash xatosi: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    @Deprecated("Deprecated API; used for document and image picker compatibility")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        handleMenuActivityResult(requestCode, resultCode, data)
     }
 
     private fun newChat() {
