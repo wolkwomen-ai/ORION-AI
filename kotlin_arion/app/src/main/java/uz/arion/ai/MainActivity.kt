@@ -429,7 +429,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         input.setText("")
         hideKeyboard()
         addMessage("Siz", question)
-        askBackend(question, false)
+        askBackend(question, true)
     }
 
     private fun hideKeyboard() {
@@ -535,7 +535,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 status.text = ""
                 addMessage("ARION", answer)
                 if (answer.contains("API kalit ulanmagan")) showApiKeyDialog()
-                if (speakAnswer && liveMode) {
+                if (speakAnswer) {
                     speak(answer)
                 } else if (liveMode) {
                     resumeLiveListening()
@@ -719,7 +719,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
     // Edge TTS: aynan uz-UZ-MadinaNeural ovozida MP3 tayyorlaydi.
     private fun speak(text: String) {
-        if (!liveMode) return
         status.text = "Madina ovozi tayyorlanmoqda…"
         thread {
             try {
@@ -737,7 +736,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 audioFile.writeBytes(audio.toByteArray())
 
                 runOnUiThread {
-                    if (!liveMode || isFinishing) return@runOnUiThread
+                    if (isFinishing) return@runOnUiThread
                     try {
                         edgePlayer?.setOnCompletionListener(null)
                         edgePlayer?.release()
