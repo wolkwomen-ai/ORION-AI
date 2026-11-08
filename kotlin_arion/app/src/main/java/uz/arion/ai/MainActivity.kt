@@ -47,6 +47,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var orb: OrbView? = null
     private var lastRms = 0f
     private var waitingForAnswer = false
+    private var pendingVoiceMode = false
+    private var voicePaused = false
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun rounded(color: Int, radius: Int): GradientDrawable =
@@ -338,8 +340,14 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
     private fun openVoiceMode() {
         if (liveMode) return
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            pendingVoiceMode = true
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 702)
+            return
+        }
         if (!ensureRecognizer()) return
         liveMode = true
+        voicePaused = false
         hideKeyboard()
         showVoicePanel()
         resumeLiveListening()
@@ -373,6 +381,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         panel.addView(hint, LinearLayout.LayoutParams(-1, dp(42)))
         val buttons = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL }
         val mute = actionText("Ⅱ", Color.rgb(230,230,230), Color.DKGRAY, 22) {
+            voicePaused = true
             if (listening) recognizer?.cancel()
             listening = false
             status.text = "Mikrofon pauzada"
@@ -409,9 +418,10 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private fun resumeLiveListening() {
-        if (!liveMode || waitingForAnswer || listening || isFinishing) return
+        if (!liveMode || voicePaused || waitingForAnswer || listening || isFinishing) return
         if (recognizer == null && !ensureRecognizer()) return
         status.text = "Sizni tinglayapman…"
+        voicePaused = false
         try { recognizer?.startListening(speechIntent()) }
         catch (_: Exception) { status.text = "Mikrofonni qayta yoqish uchun 🎙 bosing" }
     }
@@ -426,6 +436,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
     private fun closeVoiceMode() {
         liveMode = false
+        voicePaused = false
         listening = false
         try { recognizer?.cancel() } catch (_: Exception) {}
         tts?.stop()
@@ -438,7 +449,16 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 702 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
-            if (liveMode) resumeLiveListening() else startDictation()
+            if (pendingVoiceMode) {
+                pendingVoiceMode = false
+                if (ensureRecognizer()) {
+                    liveMode = true
+                    voicePaused = false
+                    hideKeyboard()
+                    showVoicePanel()
+                    resumeLiveListening()
+                }
+            } else if (liveMode) resumeLiveListening() else startDictation()
         } else if (requestCode == 702) {
             Toast.makeText(this, "Ovoz uchun mikrofon ruxsati kerak", Toast.LENGTH_LONG).show()
         }
