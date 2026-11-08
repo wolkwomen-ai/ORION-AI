@@ -725,7 +725,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             val cx = width / 2f
             val cy = height / 2f
             val base = minOf(width, height) * 0.31f
-            val radius = base + lastRms.coerceIn(0f, 12f) * dp(0.35f)
+            val radius = base + lastRms.coerceIn(0f, 12f) * resources.displayMetrics.density * 0.35f
             val glowRadius = radius * 1.48f
 
             glowPaint.shader = android.graphics.RadialGradient(
@@ -782,8 +782,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 canvas.drawLine(a.first, a.second, b.first, b.second, networkPaint)
             }
             coords.forEachIndexed { index, point ->
-                val r = if (index == 5) dp(4).toFloat() else dp(2.6f)
-                canvas.drawCircle(point.first, point.second, r + dp(2), glowPaint)
+                val r = if (index == 5) dp(4).toFloat() else resources.displayMetrics.density * 2.6f
+                canvas.drawCircle(point.first, point.second, r + dp(2).toFloat(), glowPaint)
                 canvas.drawCircle(point.first, point.second, r, nodePaint)
             }
             canvas.restoreToCount(networkSave)
