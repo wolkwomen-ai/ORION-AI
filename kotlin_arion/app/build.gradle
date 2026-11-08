@@ -2,16 +2,35 @@ plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
 }
+
 android {
     namespace 'uz.arion.ai'
     compileSdk 35
+
+    signingConfigs {
+        stable {
+            storeFile file(System.getenv("ARION_KEYSTORE_PATH") ?: "arion-upload-key.p12")
+            storeType "PKCS12"
+            storePassword System.getenv("ARION_STORE_PASSWORD")
+            keyAlias System.getenv("ARION_KEY_ALIAS") ?: "arion-upload"
+            keyPassword System.getenv("ARION_KEY_PASSWORD")
+        }
+    }
+
     defaultConfig {
         applicationId 'uz.arion.ai'
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName '1.0'
+        versionCode 2
+        versionName '1.1'
     }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.stable
+        }
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
