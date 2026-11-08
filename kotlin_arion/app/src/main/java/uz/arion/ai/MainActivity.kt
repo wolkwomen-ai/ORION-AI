@@ -107,6 +107,14 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         scroll.addView(chat)
         page.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
+        status = TextView(this).apply {
+            text = ""
+            textSize = 12f
+            setTextColor(Color.GRAY)
+            gravity = Gravity.CENTER
+        }
+        page.addView(status, LinearLayout.LayoutParams(-1, dp(18)))
+
         val composer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -150,7 +158,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
         voiceButton = actionText("≋", Color.rgb(235,235,235), Color.rgb(35,35,35), 18) { openVoiceMode() }
         rightStack.addView(voiceButton, LinearLayout.LayoutParams(dp(34), dp(28)))
-        sendButton = actionText("↑", Color.rgb(16,163,127), Color.WHITE, 24) { sendMessage() }
+        sendButton = actionText("↑", Color.rgb(37,99,235), Color.WHITE, 24) { sendMessage() }
         val sendLp = LinearLayout.LayoutParams(dp(40), dp(40))
         sendLp.topMargin = dp(2)
         rightStack.addView(sendButton, sendLp)
@@ -158,13 +166,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val composerLp = LinearLayout.LayoutParams(-1, -2)
         composerLp.topMargin = dp(8)
         page.addView(composer, composerLp)
-        status = TextView(this).apply {
-            text = ""
-            textSize = 12f
-            setTextColor(Color.GRAY)
-            gravity = Gravity.CENTER
-        }
-        page.addView(status, LinearLayout.LayoutParams(-1, dp(18)))
+
         root.addView(page, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
     }
