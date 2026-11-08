@@ -703,38 +703,26 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         if (!liveMode) return
         voicePanel?.let { root.removeView(it) }
         voicePanel = null
-        val dock = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            background = rounded(Color.rgb(248,248,250), 28).apply {
-                setStroke(dp(1), Color.rgb(225,225,230))
-            }
-            elevation = dp(6).toFloat()
+
+        // Pastga surilganda faqat shar qoladi: u yozish maydoni ustida,
+        // ekranning aynan o‘rtasida turadi. Yonida mikrofon yoki X yo‘q.
+        val dock = FrameLayout(this).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            elevation = dp(4).toFloat()
         }
         val miniOrb = OrbView(this)
-        dock.addView(miniOrb, LinearLayout.LayoutParams(dp(54), dp(54)))
-        dock.addView(TextView(this).apply {
-            text = "ARION ovozli suhbat"; textSize = 14f
-            setTextColor(Color.DKGRAY); setPadding(dp(10), 0, 0, 0)
-        }, LinearLayout.LayoutParams(0, -2, 1f))
-        dock.addView(actionText("🎙", Color.rgb(235,235,238), Color.DKGRAY, 19) {
-            if (voicePaused) { voicePaused = false; resumeLiveListening() }
-            else { voicePaused = true; if (listening) recognizer?.cancel(); listening = false }
-        }, LinearLayout.LayoutParams(dp(44), dp(44)))
-        dock.addView(actionText("×", Color.rgb(220,55,55), Color.WHITE, 24) {
-            closeVoiceMode()
-        }, LinearLayout.LayoutParams(dp(44), dp(44)).apply { leftMargin = dp(8) })
+        dock.addView(miniOrb, FrameLayout.LayoutParams(dp(88), dp(88), Gravity.CENTER))
         dock.setOnClickListener {
             root.removeView(dock)
             voiceDock = null
             showVoicePanel()
         }
         voiceDock = dock
-        root.addView(dock, FrameLayout.LayoutParams(-1, dp(72), Gravity.BOTTOM).apply {
-            leftMargin = dp(12); rightMargin = dp(12)
-            // Dock yozish panelini yopmasligi uchun uning tepasida turadi.
-            bottomMargin = dp(76)
+        root.addView(dock, FrameLayout.LayoutParams(-1, dp(104), Gravity.BOTTOM).apply {
+            leftMargin = dp(12)
+            rightMargin = dp(12)
+            // Composer ustida joylashadi, yozish maydonini to‘sib qo‘ymaydi.
+            bottomMargin = dp(66)
         })
     }
 
