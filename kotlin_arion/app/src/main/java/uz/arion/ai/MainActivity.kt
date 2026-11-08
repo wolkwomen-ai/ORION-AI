@@ -661,14 +661,11 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        header.addView(actionText("×", Color.rgb(245,245,245), Color.DKGRAY, 28) {
-            closeVoiceMode()
-        }, LinearLayout.LayoutParams(dp(44), dp(44)))
         header.addView(TextView(this).apply {
             text = "ARION"; textSize = 18f; gravity = Gravity.CENTER
             setTextColor(Color.rgb(35,35,35))
             typeface = android.graphics.Typeface.DEFAULT_BOLD
-        }, LinearLayout.LayoutParams(0, -2, 1f))
+        }, LinearLayout.LayoutParams(-1, dp(44)))
         column.addView(header)
         val center = FrameLayout(this)
         orb = OrbView(this)
@@ -693,7 +690,12 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             setTextColor(Color.rgb(105, 105, 105))
             gravity = Gravity.CENTER
         }
-        column.addView(hint, LinearLayout.LayoutParams(-1, dp(58)))
+        val footer = FrameLayout(this)
+        footer.addView(hint, FrameLayout.LayoutParams(-1, dp(58), Gravity.CENTER))
+        footer.addView(actionText("×", Color.rgb(245,245,245), Color.DKGRAY, 28) {
+            closeVoiceMode()
+        }, FrameLayout.LayoutParams(dp(52), dp(52), Gravity.RIGHT or Gravity.CENTER_VERTICAL))
+        column.addView(footer, LinearLayout.LayoutParams(-1, dp(64)))
         scrim.addView(column, FrameLayout.LayoutParams(-1, -1))
         voicePanel = scrim
         root.addView(scrim, FrameLayout.LayoutParams(-1, -1))
