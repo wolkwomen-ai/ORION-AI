@@ -940,7 +940,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             orbPaint.shader = null
 
             // Yorug‘lik aks-sadosi.
-            highlight.color = 0x668FFFFFF
+            highlight.color = 0x66FFFFFF.toInt()
             canvas.drawOval(
                 cx - radius * 0.58f, cy - radius * 0.62f,
                 cx + radius * 0.02f, cy - radius * 0.34f,
