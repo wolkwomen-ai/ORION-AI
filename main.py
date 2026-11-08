@@ -30,6 +30,8 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.popup import Popup
 from kivy.uix.filechooser import FileChooserIconView
+from kivy.graphics import Color, Ellipse, RoundedRectangle
+from kivy.core.clipboard import Clipboard
 
 
 # ============================================================
@@ -894,104 +896,56 @@ def start_server():
 class OrionApp(App):
 
     def build(self):
-
-        # Android klaviaturasi ochilganda pastki yozish satri tepaga ko'tarilsin.
-        Window.softinput_mode = "resize"
-
+        Window.softinput_mode = "below_target"
         self.title = APP_NAME
         self.selected_image = None
         self.last_answer = ""
-
-        root = BoxLayout(
-            orientation="vertical",
-            padding=dp(8),
-            spacing=dp(6)
-        )
+        root = BoxLayout(orientation="vertical", padding=dp(9), spacing=dp(6))
         self.root_box = root
-
-        header = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(6))
-        title = Label(text="[b]ARION AI[/b]", markup=True, font_size="22sp")
-        memory_button = Button(text="XOTIRA", size_hint_x=None, width=dp(88))
-        memory_button.bind(on_release=self.show_memory)
-        clear = Button(text="⋮", size_hint_x=None, width=dp(44))
-        clear.bind(on_release=self.show_chat_menu)
-        header.add_widget(title)
-        header.add_widget(memory_button)
-        header.add_widget(clear)
-        root.add_widget(header)
-
-        self.status = Label(
-            text="ARION tayyor.",
-            size_hint_y=None,
-            height=dp(26),
-            font_size="12sp"
-        )
+        header = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(8))
+        menu = Button(text="☰", size_hint_x=None, width=dp(48), font_size="25sp", background_normal="", background_color=(0,0,0,0), color=(0.12,0.16,0.22,1))
+        menu.bind(on_release=self.show_chat_menu)
+        title = Label(text="[b]ARION[/b]", markup=True, font_size="20sp", color=(0.12,0.16,0.22,1), halign="left")
+        settings = Button(text="⚙", size_hint_x=None, width=dp(48), font_size="25sp", background_normal="", background_color=(0,0,0,0), color=(0.12,0.16,0.22,1))
+        settings.bind(on_release=self.show_settings)
+        header.add_widget(menu); header.add_widget(title); header.add_widget(settings); root.add_widget(header)
+        self.status = Label(text="ARION tayyor.", size_hint_y=None, height=dp(23), font_size="12sp", color=(0.38,0.42,0.48,1))
         root.add_widget(self.status)
-
-        self.scroll = ScrollView()
-        self.chat = BoxLayout(
-            orientation="vertical",
-            size_hint_y=None,
-            spacing=dp(10),
-            padding=[dp(5), dp(8), dp(5), dp(8)]
-        )
+        self.scroll = ScrollView(do_scroll_x=False)
+        self.chat = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(10), padding=[dp(5),dp(8),dp(5),dp(8)])
         self.chat.bind(minimum_height=self.chat.setter("height"))
-        self.scroll.add_widget(self.chat)
-        root.add_widget(self.scroll)
-
-        # ChatGPT uslubidagi pastki yozish satri
-        composer = BoxLayout(
-            orientation="horizontal",
-            size_hint_y=None,
-            height=dp(58),
-            spacing=dp(5),
-            padding=[dp(5), dp(5), dp(5), dp(5)]
-        )
-        self.composer = composer
-
-        self.attach_button = Button(
-            text="+",
-            size_hint_x=None,
-            width=dp(44),
-            font_size="27sp",
-            background_normal="",
-            background_color=(0.20, 0.22, 0.25, 1)
-        )
-        self.attach_button.bind(on_release=self.show_attachment_menu)
-
-        self.input = TextInput(
-            hint_text="Xabar yozish…",
-            multiline=False,
-            size_hint_y=None,
-            height=dp(46),
-            padding=[dp(10), dp(13), dp(8), dp(8)],
-            background_normal="",
-            background_active="",
-            background_color=(0.14, 0.15, 0.17, 1),
-            foreground_color=(1, 1, 1, 1),
-            hint_text_color=(0.65, 0.67, 0.70, 1),
-            cursor_color=(1, 1, 1, 1)
-        )
-        self.input.bind(text=self.update_composer_action)
-        self.input.bind(on_text_validate=self.send_message)
-
-        self.action_button = Button(
-            text="🎙",
-            size_hint_x=None,
-            width=dp(48),
-            font_size="22sp",
-            background_normal="",
-            background_color=(0.20, 0.22, 0.25, 1)
-        )
+        holder = AnchorLayout(size_hint_y=None, height=dp(235))
+        orb = Widget(size_hint=(None,None), size=(dp(190),dp(190)))
+        with orb.canvas:
+            Color(0.30,0.69,1.0,1); Ellipse(pos=orb.pos, size=orb.size)
+            Color(0.78,0.92,1.0,0.40); Ellipse(pos=(dp(50),dp(145)), size=(dp(75),dp(32)))
+        holder.add_widget(orb); self.chat.add_widget(holder)
+        self.chat.add_widget(Label(text="Salom! Men ARION. Sizga qanday yordam beray?", size_hint_y=None, height=dp(45), font_size="16sp", color=(0.18,0.22,0.28,1)))
+        self.scroll.add_widget(self.chat); root.add_widget(self.scroll)
+        shell = BoxLayout(size_hint_y=None, height=dp(64), padding=dp(5))
+        with shell.canvas.before:
+            Color(1,1,1,1); bg = RoundedRectangle(pos=shell.pos, size=shell.size, radius=[dp(28)])
+        shell.bind(pos=lambda obj,v:setattr(bg,"pos",v), size=lambda obj,v:setattr(bg,"size",v))
+        composer = BoxLayout(spacing=dp(4))
+        plus = Button(text="+", size_hint_x=None, width=dp(40), font_size="27sp", background_normal="", background_color=(0,0,0,0), color=(0.12,0.16,0.22,1))
+        plus.bind(on_release=self.show_attachment_menu)
+        self.input = TextInput(hint_text="Xabar yozish…", multiline=False, size_hint_y=None, height=dp(46), padding=[dp(8),dp(12),dp(8),dp(8)], background_normal="", background_active="", background_color=(1,1,1,1), foreground_color=(0.1,0.12,0.15,1), hint_text_color=(0.48,0.51,0.56,1))
+        self.input.bind(text=self.update_composer_action); self.input.bind(on_text_validate=self.send_message)
+        self.action_button = Button(text="🎙", size_hint_x=None, width=dp(42), font_size="21sp", background_normal="", background_color=(0,0,0,0), color=(0.12,0.16,0.22,1))
         self.action_button.bind(on_release=self.composer_action)
-
-        composer.add_widget(self.attach_button)
-        composer.add_widget(self.input)
-        composer.add_widget(self.action_button)
-        root.add_widget(composer)
-
+        cancel = Button(text="×", size_hint_x=None, width=dp(42), font_size="26sp", background_normal="", background_color=(0.07,0.08,0.10,1), color=(1,1,1,1))
+        cancel.bind(on_release=lambda *_: setattr(self.input,"text",""))
+        composer.add_widget(plus); composer.add_widget(self.input); composer.add_widget(self.action_button); composer.add_widget(cancel)
+        shell.add_widget(composer); root.add_widget(shell)
         start_server()
         return root
+
+    def show_settings(self, *_):
+        box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
+        box.add_widget(Label(text="ARION sozlamalari\nModel: " + MODEL))
+        close = Button(text="YOPISH", size_hint_y=None, height=dp(44))
+        pop = Popup(title="SOZLAMALAR", content=box, size_hint=(0.85,0.35))
+        close.bind(on_release=pop.dismiss); box.add_widget(close); pop.open()
 
     def update_composer_action(self, instance, value):
         self.action_button.text = "➤" if value.strip() else "🎙"
@@ -1142,12 +1096,37 @@ class OrionApp(App):
 
         self.last_answer = answer
 
-        self.add_message(
-            "ORION",
-            answer
-        )
-
+        self.add_message("ORION", answer)
+        row = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(2))
+        for symbol, callback in [("▢",self.copy_answer),("👍",self.like_answer),("👎",self.dislike_answer),("🔊",self.play_voice),("↗",self.share_answer),("⋮",self.show_answer_menu)]:
+            button = Button(text=symbol, font_size="18sp", background_normal="", background_color=(0,0,0,0), color=(0.25,0.30,0.36,1))
+            button.bind(on_release=callback); row.add_widget(button)
+        self.chat.add_widget(row)
         self.status.text = "ARION tayyor."
+
+    def copy_answer(self, *_):
+        if self.last_answer:
+            Clipboard.copy(self.last_answer)
+            self.status.text = "Javob nusxalandi."
+
+    def like_answer(self, *_):
+        self.status.text = "Javob yoqdi. Rahmat!"
+
+    def dislike_answer(self, *_):
+        self.status.text = "Fikr bildirildi."
+
+    def share_answer(self, *_):
+        self.copy_answer()
+        self.status.text = "Javob nusxalandi, endi ulashishingiz mumkin."
+
+    def show_answer_menu(self, *_):
+        box = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(6))
+        pop = Popup(title="JAVOB AMALLARI", content=box, size_hint=(0.8,0.3))
+        for title, callback in [("NUSXALASH",self.copy_answer),("OVOZDA O‘QISH",self.play_voice)]:
+            btn = Button(text=title)
+            btn.bind(on_release=lambda _b, fn=callback: (pop.dismiss(), fn(None)))
+            box.add_widget(btn)
+        close = Button(text="YOPISH"); close.bind(on_release=pop.dismiss); box.add_widget(close); pop.open()
 
     def show_error(self, error):
 
