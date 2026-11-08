@@ -652,10 +652,18 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private fun showVoicePanel() {
         voiceDock?.let { root.removeView(it) }
         voiceDock = null
-        val scrim = FrameLayout(this).apply { setBackgroundColor(Color.WHITE) }
+        val scrim = FrameLayout(this).apply {
+            setBackgroundColor(Color.WHITE)
+            clipChildren = false
+            clipToPadding = false
+            background = null
+        }
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(10), dp(18), dp(20))
+            setPadding(0, dp(10), 0, dp(20))
+            background = null
+            clipChildren = false
+            clipToPadding = false
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -667,9 +675,19 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             typeface = android.graphics.Typeface.DEFAULT_BOLD
         }, LinearLayout.LayoutParams(-1, dp(44)))
         column.addView(header)
-        val center = FrameLayout(this)
-        orb = OrbView(this)
-        center.addView(orb, FrameLayout.LayoutParams(dp(340), dp(340), Gravity.CENTER))
+        val center = FrameLayout(this).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            background = null
+            clipChildren = false
+            clipToPadding = false
+            clipToOutline = false
+        }
+        orb = OrbView(this).apply {
+            background = null
+            clipToOutline = false
+            elevation = 0f
+        }
+        center.addView(orb, FrameLayout.LayoutParams(dp(360), dp(360), Gravity.CENTER))
         var dragStartY = 0f
         center.setOnTouchListener { _, event ->
             when (event.action) {
@@ -887,13 +905,13 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 cy - radius * 0.30f + driftY,
                 radius * 1.62f,
                 intArrayOf(
-                    0xFFE4F2FF.toInt(),
-                    0xFF9CCBFF.toInt(),
-                    0xFF579BFF.toInt(),
-                    0xFF2874F0.toInt(),
-                    0xFF174FC4.toInt()
+                    0xFFEAF4FF.toInt(),
+                    0xFF78B5FF.toInt(),
+                    0xFF318BFF.toInt(),
+                    0xFF1762E8.toInt(),
+                    0xFF103AA8.toInt()
                 ),
-                floatArrayOf(0f, 0.20f, 0.48f, 0.78f, 1f),
+                floatArrayOf(0f, 0.16f, 0.43f, 0.76f, 1f),
                 android.graphics.Shader.TileMode.CLAMP
             )
             canvas.drawCircle(cx, cy, radius, orbPaint)
