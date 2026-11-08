@@ -2,379 +2,488 @@ package uz.arion.ai
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
-import android.speech.SpeechRecognizer
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
-import java.io.File
+import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
-import android.view.inputmethod.InputMethodManager
-import android.content.Context
-import android.widget.*
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
+import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
-import android.text.InputType
-import android.text.Editable
-import android.text.TextWatcher
+import android.view.inputmethod.InputMethodManager
+import android.widget.*
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.Locale
+import kotlin.concurrent.thread
+import kotlin.math.abs
 
 class MainActivity : Activity(), TextToSpeech.OnInitListener {
+    private lateinit var root: FrameLayout
     private lateinit var chat: LinearLayout
     private lateinit var scroll: ScrollView
     private lateinit var input: EditText
     private lateinit var status: TextView
+    private lateinit var micButton: TextView
+    private lateinit var sendButton: TextView
+    private lateinit var voiceButton: TextView
+    private var recognizer: SpeechRecognizer? = null
     private var tts: TextToSpeech? = null
     private var ttsReady = false
-    private var speechRecognizer: SpeechRecognizer? = null
-    private var isListening = false
-    private lateinit var sendButton: TextView
-    private lateinit var micButton: View
+    private var listening = false
+    private var liveMode = false
+    private var voicePanel: View? = null
+    private var orb: OrbView? = null
+    private var lastRms = 0f
+    private var waitingForAnswer = false
+
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    private fun rounded(color: Int, radius: Int): GradientDrawable =
+        GradientDrawable().apply { setColor(color); cornerRadius = dp(radius).toFloat() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = Color.rgb(255, 255, 255)
-        window.navigationBarColor = Color.rgb(255, 255, 255)
+        window.statusBarColor = Color.WHITE
+        window.navigationBarColor = Color.WHITE
         if (android.os.Build.VERSION.SDK_INT >= 26) {
-            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+            window.decorView.systemUiVisibility =
+                View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
         }
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
+            WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
         tts = TextToSpeech(this, this)
         buildScreen()
         addMessage("ARION", "Assalomu alaykum! Men ARIONman. Sizga qanday yordam beray?")
     }
 
-    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
-
     private fun buildScreen() {
-        val root = LinearLayout(this).apply {
+        root = FrameLayout(this).apply { setBackgroundColor(Color.WHITE) }
+        val page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            setBackgroundColor(Color.WHITE)
+            setPadding(dp(12), dp(4), dp(12), dp(8))
         }
-        val header = TextView(this).apply {
-            text = "ARION"
-            textSize = 21f
-            setTextColor(Color.rgb(25, 25, 25))
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(8), dp(8), dp(8))
         }
-        root.addView(header)
-        status = TextView(this).apply {
-            text = "AI yordamchi"
-            textSize = 12f
-            setTextColor(Color.rgb(120, 120, 120))
-            setPadding(dp(8), 0, dp(8), dp(8))
+        val menu = actionText("☰", Color.WHITE, Color.rgb(35,35,35), 24) {
+            val popup = PopupMenu(this@MainActivity, it)
+            popup.menu.add("Yangi suhbat").setOnMenuItemClickListener { newChat(); true }
+            popup.menu.add("Ovozli suhbat").setOnMenuItemClickListener { openVoiceMode(); true }
+            popup.show()
         }
-        root.addView(status)
+        header.addView(menu, LinearLayout.LayoutParams(dp(48), dp(48)))
+        val titleBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
+        titleBox.addView(TextView(this).apply {
+            text = "ARION"; textSize = 19f; setTextColor(Color.rgb(30,30,30)); gravity = Gravity.CENTER
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        })
+        titleBox.addView(TextView(this).apply {
+            text = "AI yordamchi"; textSize = 11f; setTextColor(Color.GRAY); gravity = Gravity.CENTER
+        })
+        header.addView(titleBox, LinearLayout.LayoutParams(0, -2, 1f))
+        val newChat = actionText("✎", Color.WHITE, Color.rgb(35,35,35), 22) { newChat() }
+        header.addView(newChat, LinearLayout.LayoutParams(dp(48), dp(48)))
+        page.addView(header)
 
-        scroll = ScrollView(this).apply {
-            isFillViewport = true
-            clipToPadding = false
-        }
+        scroll = ScrollView(this).apply { isFillViewport = true; clipToPadding = false }
         chat = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(2), dp(8), dp(2), dp(12))
+            setPadding(dp(2), dp(12), dp(2), dp(16))
         }
         scroll.addView(chat)
-        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        page.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        // ChatGPT uslubidagi bitta yumaloq xabar paneli.
         val composer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(5), dp(6), dp(5))
-            background = GradientDrawable().apply {
-                setColor(Color.rgb(247, 247, 248))
-                cornerRadius = dp(28).toFloat()
-                setStroke(dp(1), Color.rgb(225, 225, 225))
+            setPadding(dp(6), dp(5), dp(6), dp(5))
+            background = rounded(Color.rgb(247,247,248), 28)
+            background = rounded(Color.rgb(247,247,248), 28).apply {
+                setStroke(dp(1), Color.rgb(225,225,225))
             }
             elevation = dp(1).toFloat()
         }
+        val plus = actionText("+", Color.rgb(235,235,235), Color.rgb(35,35,35), 27) {
+            Toast.makeText(this, "Qo‘shimcha imkoniyatlar keyingi bosqichda ulanadi", Toast.LENGTH_SHORT).show()
+        }
+        composer.addView(plus, LinearLayout.LayoutParams(dp(40), dp(40)))
 
         input = EditText(this).apply {
             hint = "Xabar yuboring"
             textSize = 16f
             minLines = 1
             maxLines = 5
-            isFocusable = true
-            isFocusableInTouchMode = true
-            isClickable = true
-            showSoftInputOnFocus = true
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_TEXT_FLAG_MULTI_LINE
-            imeOptions = EditorInfo.IME_ACTION_SEND
-            setTextColor(Color.rgb(30, 30, 30))
-            setHintTextColor(Color.rgb(135, 135, 135))
-            setPadding(dp(10), dp(9), dp(6), dp(9))
+            setTextColor(Color.rgb(30,30,30))
+            setHintTextColor(Color.GRAY)
+            setPadding(dp(10), dp(8), dp(6), dp(8))
             background = null
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
+                android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            imeOptions = EditorInfo.IME_ACTION_SEND
             setOnEditorActionListener { _, actionId, _ ->
                 if (actionId == EditorInfo.IME_ACTION_SEND) { sendMessage(); true } else false
             }
-            setOnClickListener {
-                requestFocus()
-                post {
-                    (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-                        .showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
-                }
-            }
         }
-        val plusButton = makeRoundAction("+", Color.rgb(235, 235, 235), Color.rgb(35, 35, 35)) {
-            Toast.makeText(this, "Qo‘shimcha imkoniyatlar keyingi bosqichda qo‘shiladi", Toast.LENGTH_SHORT).show()
+        composer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
+
+        micButton = actionText("🎙", Color.rgb(235,235,235), Color.rgb(35,35,35), 18) { startDictation() }
+        composer.addView(micButton, LinearLayout.LayoutParams(dp(40), dp(40)))
+
+        val rightStack = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
         }
-        plusButton.textSize = 28f
-        composer.addView(plusButton, LinearLayout.LayoutParams(dp(40), dp(40)))
-
-        val inputParams = LinearLayout.LayoutParams(0, -2, 1f)
-        inputParams.setMargins(dp(4), 0, dp(4), 0)
-        composer.addView(input, inputParams)
-
-        micButton = makeMicAction(::toggleSpeechRecognition)
-        composer.addView(micButton)
-        val sendParams = LinearLayout.LayoutParams(dp(40), dp(40))
-        sendButton = makeRoundAction("↑", Color.rgb(16, 163, 127), Color.WHITE, ::sendOrStop)
-        sendButton.visibility = View.VISIBLE
-        composer.addView(sendButton, sendParams)
-
-        input.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                if (!isListening) {
-                    val hasText = !s.isNullOrBlank()
-                    // Mikrofon va yuborish tugmalari matn bor-yo‘qligidan qat’i nazar ko‘rinib turadi.
-                micButton.visibility = View.VISIBLE
-                sendButton.visibility = View.VISIBLE
-                }
-            }
-            override fun afterTextChanged(s: Editable?) {}
-        })
-        val composerParams = LinearLayout.LayoutParams(-1, -2)
-        composerParams.setMargins(0, dp(8), 0, dp(4))
-        root.addView(composer, composerParams)
-
-        root.setOnApplyWindowInsetsListener { view, insets ->
-            val left: Int
-            val top: Int
-            val right: Int
-            val bottom: Int
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                val bars = insets.getInsets(android.view.WindowInsets.Type.systemBars())
-                val ime = insets.getInsets(android.view.WindowInsets.Type.ime())
-                left = bars.left
-                top = bars.top
-                right = bars.right
-                bottom = maxOf(bars.bottom, ime.bottom)
-            } else {
-                left = insets.systemWindowInsetLeft
-                top = insets.systemWindowInsetTop
-                right = insets.systemWindowInsetRight
-                bottom = insets.systemWindowInsetBottom
-            }
-            view.setPadding(dp(12) + left, dp(8) + top, dp(12) + right, dp(8) + bottom)
-            insets
+        voiceButton = actionText("≋", Color.rgb(235,235,235), Color.rgb(35,35,35), 18) { openVoiceMode() }
+        rightStack.addView(voiceButton, LinearLayout.LayoutParams(dp(34), dp(28)))
+        sendButton = actionText("↑", Color.rgb(16,163,127), Color.WHITE, 24) { sendMessage() }
+        val sendLp = LinearLayout.LayoutParams(dp(40), dp(40))
+        sendLp.topMargin = dp(2)
+        rightStack.addView(sendButton, sendLp)
+        composer.addView(rightStack, LinearLayout.LayoutParams(dp(42), -2))
+        val composerLp = LinearLayout.LayoutParams(-1, -2)
+        composerLp.topMargin = dp(8)
+        page.addView(composer, composerLp)
+        status = TextView(this).apply {
+            text = ""
+            textSize = 12f
+            setTextColor(Color.GRAY)
+            gravity = Gravity.CENTER
         }
-
+        page.addView(status, LinearLayout.LayoutParams(-1, dp(18)))
+        root.addView(page, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
-        root.requestApplyInsets()
-        window.setSoftInputMode(
-            android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
-                android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
-        )
     }
 
-    private fun makeMicAction(action: () -> Unit): View {
-        return object : View(this) {
-            private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.rgb(35, 35, 35)
-                style = android.graphics.Paint.Style.STROKE
-                strokeWidth = dp(2).toFloat()
-                strokeCap = android.graphics.Paint.Cap.ROUND
-                strokeJoin = android.graphics.Paint.Join.ROUND
-            }
-            init {
-                layoutParams = LinearLayout.LayoutParams(dp(40), dp(40))
-                background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(Color.rgb(235, 235, 235))
-                }
-                setOnClickListener { action() }
-                contentDescription = "Mikrofon"
-            }
-            override fun onDraw(canvas: android.graphics.Canvas) {
-                super.onDraw(canvas)
-                val cx = width / 2f
-                val cy = height / 2f
-                canvas.drawRoundRect(
-                    cx - dp(4), cy - dp(10), cx + dp(4), cy + dp(4),
-                    dp(4).toFloat(), dp(4).toFloat(), paint
-                )
-                val path = android.graphics.Path().apply {
-                    moveTo(cx - dp(9), cy)
-                    cubicTo(cx - dp(9), cy + dp(13), cx + dp(9), cy + dp(13), cx + dp(9), cy)
-                    moveTo(cx, cy + dp(10))
-                    lineTo(cx, cy + dp(15))
-                    moveTo(cx - dp(5), cy + dp(15))
-                    lineTo(cx + dp(5), cy + dp(15))
-                }
-                canvas.drawPath(path, paint)
-            }
-        }
-    }
-
-    private fun makeRoundAction(label: String, fill: Int, foreground: Int, action: () -> Unit) =
-        TextView(this).apply {
+    private fun actionText(label: String, fill: Int, foreground: Int, size: Int, action: (View) -> Unit): TextView {
+        return TextView(this).apply {
             text = label
-            textSize = if (label == "↑") 25f else 19f
+            textSize = size.toFloat()
             gravity = Gravity.CENTER
             setTextColor(foreground)
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(fill)
-            }
-            if (layoutParams == null) {
-                val size = dp(40)
-                layoutParams = LinearLayout.LayoutParams(size, size)
-            }
-            setOnClickListener { action() }
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(fill) }
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { action(this) }
+            contentDescription = label
         }
+    }
 
     private fun addMessage(who: String, message: String) {
+        val isUser = who == "Siz"
         val bubble = TextView(this).apply {
             text = message
             textSize = 16f
-            setTextColor(Color.rgb(35, 35, 35))
-            setPadding(dp(14), dp(11), dp(14), dp(11))
-            background = GradientDrawable().apply {
-                setColor(if (who == "Siz") Color.rgb(240, 240, 240) else Color.WHITE)
-                cornerRadius = dp(18).toFloat()
-            }
+            setTextColor(Color.rgb(35,35,35))
+            setPadding(dp(14), dp(10), dp(14), dp(10))
             setTextIsSelectable(true)
+            if (isUser) {
+                background = rounded(Color.rgb(240,240,240), 20)
+            } else {
+                background = null
+                setPadding(dp(4), dp(8), dp(4), dp(8))
+            }
         }
-        val params = LinearLayout.LayoutParams(-1, -2)
-        params.setMargins(0, dp(4), 0, dp(4))
-        chat.addView(bubble, params)
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = if (isUser) Gravity.END else Gravity.START
+            addView(bubble, LinearLayout.LayoutParams(
+                if (isUser) (resources.displayMetrics.widthPixels * 0.78f).toInt() else -1, -2
+            ))
+        }
+        val lp = LinearLayout.LayoutParams(-1, -2)
+        lp.setMargins(dp(2), dp(4), dp(2), dp(4))
+        chat.addView(row, lp)
         scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
     }
 
-    private fun sendOrStop() {
-        sendMessage()
+    private fun newChat() {
+        chat.removeAllViews()
+        addMessage("ARION", "Yangi suhbat boshlandi. Sizga qanday yordam beray?")
     }
 
-    private fun toggleSpeechRecognition() {
-        if (isListening) {
-            speechRecognizer?.stopListening()
-            return
+    private fun sendMessage() {
+        val question = input.text.toString().trim()
+        if (question.isEmpty() || waitingForAnswer) return
+        input.setText("")
+        hideKeyboard()
+        addMessage("Siz", question)
+        askBackend(question, false)
+    }
+
+    private fun hideKeyboard() {
+        (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+            .hideSoftInputFromWindow(input.windowToken, 0)
+    }
+
+    private fun askBackend(question: String, speakAnswer: Boolean) {
+        waitingForAnswer = true
+        status.text = "ARION javob tayyorlamoqda…"
+        thread {
+            var answer: String
+            try {
+                val conn = (URL("http://127.0.0.1:8765/ask").openConnection() as HttpURLConnection)
+                conn.requestMethod = "POST"
+                conn.connectTimeout = 5000
+                conn.readTimeout = 95000
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                val body = JSONObject().put("question", question).toString().toByteArray(Charsets.UTF_8)
+                conn.outputStream.use { it.write(body) }
+                val code = conn.responseCode
+                val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+                val response = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val json = JSONObject(response)
+                if (code in 200..299) answer = json.optString("answer", "ARION bo‘sh javob oldi.")
+                else answer = json.optString("error", "Server xatosi: $code")
+                conn.disconnect()
+            } catch (e: Exception) {
+                answer = "ARION serveriga ulanib bo‘lmadi. Pydroid 3 ichida ARION serverini ishga tushiring (127.0.0.1:8765)."
+            }
+            runOnUiThread {
+                waitingForAnswer = false
+                status.text = ""
+                addMessage("ARION", answer)
+                if (speakAnswer && liveMode) {
+                    speak(answer)
+                } else if (liveMode) {
+                    resumeLiveListening()
+                }
+            }
         }
+    }
+
+    private fun ensureRecognizer(): Boolean {
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            addMessage("ARION", "Bu telefonda nutqni matnga aylantirish xizmati mavjud emas.")
-            return
+            Toast.makeText(this, "Telefonda ovozni aniqlash xizmati topilmadi", Toast.LENGTH_LONG).show()
+            return false
         }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 702)
+            return false
+        }
+        if (recognizer == null) {
+            recognizer = SpeechRecognizer.createSpeechRecognizer(this)
+            recognizer?.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) { listening = true; status.text = if (liveMode) "Sizni tinglayapman…" else "Ovoz yozilmoqda…" }
+                override fun onBeginningOfSpeech() { status.text = if (liveMode) "Gapiring…" else "Yozilmoqda…" }
+                override fun onRmsChanged(rmsdB: Float) { lastRms = rmsdB; orb?.invalidate() }
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() { listening = false; status.text = "Ovoz qayta ishlanmoqda…" }
+                override fun onError(error: Int) {
+                    listening = false
+                    if (liveMode && !waitingForAnswer) {
+                        if (error != SpeechRecognizer.ERROR_NO_MATCH && error != SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                            status.text = "Ovozni aniqlash xatosi"
+                        }
+                        if (liveMode) root.postDelayed({ resumeLiveListening() }, 700)
+                    } else {
+                        status.text = ""
+                    }
+                }
+                override fun onResults(results: Bundle?) {
+                    listening = false
+                    val phrase = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+                    if (phrase.isNotBlank()) {
+                        if (liveMode) {
+                            addMessage("Siz", phrase)
+                            askBackend(phrase, true)
+                        } else {
+                            input.setText((input.text.toString() + " " + phrase).trim())
+                            input.setSelection(input.text.length)
+                            status.text = "Matn tayyor — ↑ tugmasini bosing"
+                        }
+                    } else if (liveMode) {
+                        resumeLiveListening()
+                    } else status.text = ""
+                }
+                override fun onPartialResults(partialResults: Bundle?) {}
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+        }
+        return true
+    }
+
+    private fun speechIntent(): Intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE, "uz-UZ")
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "uz-UZ")
+        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+    }
+
+    private fun startDictation() {
+        if (listening) {
+            recognizer?.stopListening()
             return
         }
-        try {
-            if (speechRecognizer == null) {
-                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
-                speechRecognizer?.setRecognitionListener(object : RecognitionListener {
-                    override fun onReadyForSpeech(params: Bundle?) {
-                        isListening = true
-                        status.text = "Ovoz yozilmoqda…"
-                        micButton.invalidate()
-                    }
-                    override fun onBeginningOfSpeech() {}
-                    override fun onRmsChanged(rmsdB: Float) { micButton.invalidate() }
-                    override fun onBufferReceived(buffer: ByteArray?) {}
-                    override fun onEndOfSpeech() {
-                        status.text = "Ovoz qayta ishlanmoqda…"
-                    }
-                    override fun onError(error: Int) {
-                        isListening = false
-                        micButton.invalidate()
-                        status.text = "AI yordamchi"
-                        if (input.text.isNullOrBlank()) {
-                            micButton.visibility = View.VISIBLE
-                            sendButton.visibility = View.VISIBLE
-                        }
-                        if (error != android.speech.SpeechRecognizer.ERROR_NO_MATCH &&
-                            error != android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
-                            Toast.makeText(this@MainActivity, "Ovozni aniqlashda xatolik ($error)", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    override fun onResults(results: Bundle?) {
-                        isListening = false
-                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        val spoken = matches?.firstOrNull().orEmpty()
-                        if (spoken.isNotBlank()) {
-                            input.setText((input.text.toString() + " " + spoken).trim())
-                            input.setSelection(input.text.length)
-                        }
-                        status.text = "AI yordamchi"
-                        micButton.invalidate()
-                        micButton.visibility = View.VISIBLE
-                        sendButton.visibility = View.VISIBLE
-                    }
-                    override fun onPartialResults(partialResults: Bundle?) {}
-                    override fun onEvent(eventType: Int, params: Bundle?) {}
-                })
+        if (!ensureRecognizer()) return
+        liveMode = false
+        status.text = "Tayyorlanmoqda…"
+        try { recognizer?.startListening(speechIntent()) }
+        catch (_: Exception) { status.text = "Mikrofonni ishga tushirib bo‘lmadi" }
+    }
+
+    private fun openVoiceMode() {
+        if (liveMode) return
+        if (!ensureRecognizer()) return
+        liveMode = true
+        hideKeyboard()
+        showVoicePanel()
+        resumeLiveListening()
+    }
+
+    private fun showVoicePanel() {
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(24), dp(24), dp(24), dp(28))
+            background = rounded(Color.rgb(249,249,249), 30).apply {
+                setStroke(dp(1), Color.rgb(230,230,230))
             }
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "uz-UZ")
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "uz-UZ")
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-            }
-            isListening = true
-            micButton.invalidate()
-            status.text = "Ovoz yozilmoqda…"
-            speechRecognizer?.startListening(intent)
-        } catch (e: Exception) {
-            isListening = false
-            micButton.invalidate()
-            status.text = "AI yordamchi"
-            addMessage("ARION", "Mikrofonni ishga tushirib bo‘lmadi: " + (e.localizedMessage ?: "xatolik"))
+            elevation = dp(12).toFloat()
         }
+        val top = TextView(this).apply {
+            text = "ARION bilan ovozli suhbat"
+            textSize = 19f
+            setTextColor(Color.rgb(35,35,35))
+            gravity = Gravity.CENTER
+        }
+        panel.addView(top, LinearLayout.LayoutParams(-1, dp(44)))
+        orb = OrbView(this)
+        panel.addView(orb, LinearLayout.LayoutParams(dp(190), dp(190)))
+        val hint = TextView(this).apply {
+            text = "Gapiring — ARION tinglayapti"
+            textSize = 14f
+            setTextColor(Color.DKGRAY)
+            gravity = Gravity.CENTER
+        }
+        panel.addView(hint, LinearLayout.LayoutParams(-1, dp(42)))
+        val buttons = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL }
+        val mute = actionText("Ⅱ", Color.rgb(230,230,230), Color.DKGRAY, 22) {
+            if (listening) recognizer?.cancel()
+            listening = false
+            status.text = "Mikrofon pauzada"
+            hint.text = "Davom ettirish uchun mikrofonni bosing"
+        }
+        val end = actionText("×", Color.rgb(210,55,55), Color.WHITE, 28) { closeVoiceMode() }
+        val resume = actionText("🎙", Color.rgb(16,163,127), Color.WHITE, 20) { resumeLiveListening() }
+        buttons.addView(mute, LinearLayout.LayoutParams(dp(54), dp(54)).apply { rightMargin = dp(18) })
+        buttons.addView(end, LinearLayout.LayoutParams(dp(54), dp(54)).apply { rightMargin = dp(18) })
+        buttons.addView(resume, LinearLayout.LayoutParams(dp(54), dp(54)))
+        panel.addView(buttons)
+        panel.setOnTouchListener(object : View.OnTouchListener {
+            var downY = 0f
+            override fun onTouch(v: View, event: MotionEvent): Boolean {
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> { downY = event.rawY; return true }
+                    MotionEvent.ACTION_UP -> {
+                        val delta = event.rawY - downY
+                        if (abs(delta) > dp(70)) closeVoiceMode()
+                        return true
+                    }
+                }
+                return true
+            }
+        })
+        val scrim = FrameLayout(this).apply { setBackgroundColor(0x66000000) }
+        scrim.addView(panel, FrameLayout.LayoutParams(-1, dp(430), Gravity.BOTTOM).apply {
+            leftMargin = dp(10); rightMargin = dp(10); bottomMargin = dp(12)
+        })
+        scrim.setOnClickListener { closeVoiceMode() }
+        panel.setOnClickListener { }
+        voicePanel = scrim
+        root.addView(scrim, FrameLayout.LayoutParams(-1, -1))
+    }
+
+    private fun resumeLiveListening() {
+        if (!liveMode || waitingForAnswer || listening || isFinishing) return
+        if (recognizer == null && !ensureRecognizer()) return
+        status.text = "Sizni tinglayapman…"
+        try { recognizer?.startListening(speechIntent()) }
+        catch (_: Exception) { status.text = "Mikrofonni qayta yoqish uchun 🎙 bosing" }
+    }
+
+    private fun speak(text: String) {
+        if (!liveMode || !ttsReady) { if (liveMode) resumeLiveListening(); return }
+        tts?.speak(text.take(3500), TextToSpeech.QUEUE_FLUSH, null, "arion-answer")
+        root.postDelayed({
+            if (liveMode && !waitingForAnswer) resumeLiveListening()
+        }, (text.length.coerceAtMost(3500) * 65L).coerceIn(1800L, 18000L))
+    }
+
+    private fun closeVoiceMode() {
+        liveMode = false
+        listening = false
+        try { recognizer?.cancel() } catch (_: Exception) {}
+        tts?.stop()
+        voicePanel?.let { root.removeView(it) }
+        voicePanel = null
+        orb = null
+        status.text = ""
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 702 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            toggleSpeechRecognition()
+        if (requestCode == 702 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            if (liveMode) resumeLiveListening() else startDictation()
         } else if (requestCode == 702) {
-            addMessage("ARION", "Ovoz yozish uchun mikrofon ruxsatini yoqing.")
+            Toast.makeText(this, "Ovoz uchun mikrofon ruxsati kerak", Toast.LENGTH_LONG).show()
         }
-    }
-
-    private fun sendMessage() {
-        val message = input.text.toString().trim()
-        if (message.isEmpty()) return
-        input.setText("")
-        micButton.visibility = View.VISIBLE
-        sendButton.visibility = View.VISIBLE
-        (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-            .hideSoftInputFromWindow(input.windowToken, 0)
-        addMessage("Siz", message)
-        addMessage("ARION", "Xabaringiz qabul qilindi. Keyingi bosqichda AI serveriga ulaymiz.")
     }
 
     override fun onInit(result: Int) {
         if (result == TextToSpeech.SUCCESS) {
             ttsReady = true
-            val languageResult = tts?.setLanguage(Locale("uz", "UZ"))
-            if (languageResult == TextToSpeech.LANG_MISSING_DATA || languageResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+            val code = tts?.setLanguage(Locale("uz", "UZ"))
+            if (code == TextToSpeech.LANG_MISSING_DATA || code == TextToSpeech.LANG_NOT_SUPPORTED) {
                 tts?.setLanguage(Locale("ru", "RU"))
             }
         }
     }
 
     override fun onDestroy() {
+        liveMode = false
+        try { recognizer?.destroy() } catch (_: Exception) {}
         tts?.stop()
         tts?.shutdown()
-        speechRecognizer?.destroy()
-        speechRecognizer = null
         super.onDestroy()
+    }
+
+    private inner class OrbView(context: Context) : View(context) {
+        private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(16,163,127); style = Paint.Style.FILL }
+        private val glow = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x3310A37F; style = Paint.Style.FILL }
+        private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE; style = Paint.Style.STROKE; strokeWidth = dp(4).toFloat(); strokeCap = Paint.Cap.ROUND
+        }
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val cx = width / 2f
+            val cy = height / 2f
+            val radius = dp(48) + (lastRms.coerceIn(0f, 12f) * dp(1.2f)).toInt()
+            canvas.drawCircle(cx, cy, radius + dp(18), glow)
+            canvas.drawCircle(cx, cy, radius.toFloat(), fill)
+            val path = Path()
+            for (i in 0..4) {
+                val x = cx + (i - 2) * dp(13)
+                val h = dp(10) + (lastRms.coerceIn(0f, 12f) * dp(1.5f)) * (if (i % 2 == 0) 1f else .65f)
+                if (i == 0) path.moveTo(x, cy - h) else path.lineTo(x, cy - h)
+                path.lineTo(x, cy + h)
+            }
+            canvas.drawPath(path, line)
+            postInvalidateDelayed(120)
+        }
     }
 }
