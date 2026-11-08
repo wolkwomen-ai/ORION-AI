@@ -20,6 +20,8 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import androidx.core.view.WindowCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
@@ -58,12 +60,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Android 15 / API 35 edge-to-edge holatini o‘chirib,
-        // tizim paneli insetlarini Android o‘zi hisoblashiga ruxsat beramiz.
-        // Shunda composer navigatsiya paneli ustiga tushmaydi va adjustResize ishlaydi.
-        if (android.os.Build.VERSION.SDK_INT >= 30) {
-            WindowCompat.setDecorFitsSystemWindows(window, true)
-        }
+        // Edge-to-edge: kontentni status/nav paneli va klaviaturadan aniq inset bilan ajratamiz.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
 
         window.statusBarColor = Color.WHITE
         window.navigationBarColor = Color.WHITE
@@ -181,6 +179,16 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
         root.addView(page, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
+
+        // Pastki yozish paneli telefon navigatsiya tugmalari ustiga tushmasin.
+        // Klaviatura ochilganda composer IME yuqorisiga ko‘tariladi.
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            view.setPadding(0, bars.top, 0, maxOf(bars.bottom, ime.bottom))
+            insets
+        }
+        ViewCompat.requestApplyInsets(root)
     }
 
     private fun actionText(label: String, fill: Int, foreground: Int, size: Int, action: (View) -> Unit): TextView {
