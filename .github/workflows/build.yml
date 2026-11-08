@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - arion-madina-uzbek-voice
     paths:
       - 'kotlin_arion/**'
       - '.github/workflows/build.yml'
