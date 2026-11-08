@@ -919,8 +919,10 @@ class OrionApp(App):
         holder = AnchorLayout(size_hint_y=None, height=dp(235))
         orb = Widget(size_hint=(None,None), size=(dp(190),dp(190)))
         with orb.canvas:
-            Color(0.30,0.69,1.0,1); Ellipse(pos=orb.pos, size=orb.size)
-            Color(0.78,0.92,1.0,0.40); Ellipse(pos=(dp(50),dp(145)), size=(dp(75),dp(32)))
+            Color(0.30,0.69,1.0,1); orb_shape = Ellipse(pos=orb.pos, size=orb.size)
+            Color(0.78,0.92,1.0,0.40); orb_shine = Ellipse(pos=(orb.x+dp(38),orb.y+dp(130)), size=(dp(75),dp(32)))
+        orb.bind(pos=lambda obj,v: (setattr(orb_shape,"pos",v), setattr(orb_shine,"pos",(v[0]+dp(38),v[1]+dp(130)))),
+                 size=lambda obj,v: setattr(orb_shape,"size",v))
         holder.add_widget(orb); self.chat.add_widget(holder)
         self.chat.add_widget(Label(text="Salom! Men ARION. Sizga qanday yordam beray?", size_hint_y=None, height=dp(45), font_size="16sp", color=(0.18,0.22,0.28,1)))
         self.scroll.add_widget(self.chat); root.add_widget(self.scroll)
