@@ -89,19 +89,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val menu = actionText("☰", Color.WHITE, Color.rgb(35,35,35), 24) {
-            val popup = PopupMenu(this@MainActivity, it)
-            popup.menu.add("Yangi suhbat").setOnMenuItemClickListener { newChat(); true }
-            popup.menu.add("Rasm tanlash").setOnMenuItemClickListener { chooseImage(); true }
-            popup.menu.add("Xotira").setOnMenuItemClickListener { openMemory(); true }
-            popup.menu.add("Agent rejimi").setOnMenuItemClickListener { toggleAgentMode(); true }
-            popup.menu.add("Ob-havo").setOnMenuItemClickListener { openWeather(); true }
-            popup.menu.add("TXT fayl yaratish").setOnMenuItemClickListener { createTxtFile(); true }
-            popup.menu.add("Internet qidiruvi").setOnMenuItemClickListener { openInternetSearch(); true }
-            popup.menu.add("Telefon sozlamalari").setOnMenuItemClickListener { openPhoneSettings(); true }
-            popup.menu.add("Ovozli suhbat").setOnMenuItemClickListener { openVoiceMode(); true }
-            popup.show()
-        }
+        val menu = actionText("☰", Color.WHITE, Color.rgb(35,35,35), 24) { openDrawer() }
         header.addView(menu, LinearLayout.LayoutParams(dp(48), dp(48)))
         header.addView(OrbView(this), LinearLayout.LayoutParams(dp(40), dp(40)))
         val titleBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
@@ -200,6 +188,126 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             insets
         }
         ViewCompat.requestApplyInsets(root)
+    }
+
+    // ChatGPT uslubidagi chap yon menyu; mavjud ARION amallari saqlanadi.
+    private fun openDrawer() {
+        val scrim = FrameLayout(this).apply {
+            setBackgroundColor(0x66000000)
+            setOnClickListener { root.removeView(this) }
+        }
+        val drawer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(34), dp(14), dp(18))
+            setBackgroundColor(Color.WHITE)
+            elevation = dp(18).toFloat()
+            setOnClickListener { }
+        }
+        val heading = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val brand = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(this@MainActivity).apply {
+                text = "ARION AI"
+                textSize = 21f
+                setTextColor(Color.rgb(25, 35, 55))
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = "Shaxsiy sun’iy intellekt yordamchi"
+                textSize = 11f
+                setTextColor(Color.GRAY)
+            })
+        }
+        heading.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
+        heading.addView(actionText("×", Color.rgb(245,246,248), Color.DKGRAY, 25) {
+            root.removeView(scrim)
+        }, LinearLayout.LayoutParams(dp(42), dp(42)))
+        drawer.addView(heading)
+
+        val newChat = TextView(this).apply {
+            text = "＋   Yangi suhbat"
+            textSize = 16f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setTextColor(Color.rgb(25, 35, 55))
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), 0, dp(12), 0)
+            background = rounded(Color.rgb(240,246,255), 16)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                root.removeView(scrim)
+                newChat()
+            }
+        }
+        drawer.addView(newChat, LinearLayout.LayoutParams(-1, dp(52)).apply {
+            topMargin = dp(26)
+            bottomMargin = dp(20)
+        })
+
+        val scrollMenu = ScrollView(this).apply { isFillViewport = true }
+        val items = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        fun section(label: String) {
+            items.addView(TextView(this).apply {
+                text = label
+                textSize = 11f
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setTextColor(Color.rgb(130, 138, 150))
+                setPadding(dp(8), dp(14), dp(8), dp(8))
+            })
+        }
+        fun item(icon: String, label: String, action: () -> Unit) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(10), 0, dp(8), 0)
+                background = rounded(Color.WHITE, 12)
+                isClickable = true
+                isFocusable = true
+            }
+            row.addView(TextView(this).apply {
+                text = icon
+                textSize = 19f
+                gravity = Gravity.CENTER
+                setTextColor(Color.rgb(55, 65, 80))
+            }, LinearLayout.LayoutParams(dp(34), dp(46)))
+            row.addView(TextView(this).apply {
+                text = label
+                textSize = 15f
+                setTextColor(Color.rgb(45, 50, 60))
+                gravity = Gravity.CENTER_VERTICAL
+            }, LinearLayout.LayoutParams(0, -1, 1f))
+            row.setOnClickListener {
+                root.removeView(scrim)
+                action()
+            }
+            items.addView(row, LinearLayout.LayoutParams(-1, dp(48)))
+        }
+
+        section("ISH VA SUHBAT")
+        item("▧", "Rasm tanlash") { chooseImage() }
+        item("◉", "Xotira") { openMemory() }
+        item("✦", "Agent rejimi") { toggleAgentMode() }
+        section("QO‘SHIMCHA IMKONIYATLAR")
+        item("☁", "Ob-havo") { openWeather() }
+        item("▤", "TXT fayl yaratish") { createTxtFile() }
+        item("⌕", "Internet qidiruvi") { openInternetSearch() }
+        item("⚙", "Telefon sozlamalari") { openPhoneSettings() }
+        item("🎙", "Ovozli suhbat") { openVoiceMode() }
+        scrollMenu.addView(items)
+        drawer.addView(scrollMenu, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        val footer = TextView(this).apply {
+            text = "ARION AI  •  1.6"
+            textSize = 11f
+            setTextColor(Color.GRAY)
+            setPadding(dp(8), dp(14), dp(8), dp(4))
+        }
+        drawer.addView(footer)
+        scrim.addView(drawer, FrameLayout.LayoutParams(dp(310), -1, Gravity.START))
+        root.addView(scrim, FrameLayout.LayoutParams(-1, -1))
     }
 
     private fun actionText(label: String, fill: Int, foreground: Int, size: Int, action: (View) -> Unit): TextView {
