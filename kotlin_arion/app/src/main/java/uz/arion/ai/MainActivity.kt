@@ -118,8 +118,14 @@ class MainActivity : Activity() {
             text = "AI yordamchi"; textSize = 11f; setTextColor(Color.GRAY); gravity = Gravity.CENTER
         })
         header.addView(titleBox, LinearLayout.LayoutParams(0, -2, 1f))
-        val memoryButton = actionText("＋", Color.WHITE, Color.rgb(35,35,35), 27) { newChat() }
-        header.addView(memoryButton, LinearLayout.LayoutParams(dp(48), dp(48)))
+        val settingsButton = actionText("⚙", Color.WHITE, Color.rgb(35,35,35), 23) { anchor ->
+            val settings = PopupMenu(this@MainActivity, anchor)
+            settings.menu.add("API kalitni ulash").setOnMenuItemClickListener { showApiKeyDialog(); true }
+            settings.menu.add("Telefon sozlamalari").setOnMenuItemClickListener { openPhoneSettings(); true }
+            settings.menu.add("Ovozli suhbat").setOnMenuItemClickListener { openVoiceMode(); true }
+            settings.show()
+        }
+        header.addView(settingsButton, LinearLayout.LayoutParams(dp(48), dp(48)))
         page.addView(header)
 
         scroll = ScrollView(this).apply { isFillViewport = true; clipToPadding = false }
@@ -257,7 +263,7 @@ class MainActivity : Activity() {
                 gravity = Gravity.START or Gravity.CENTER_VERTICAL
                 setPadding(dp(0), dp(0), dp(0), dp(0))
             }
-            fun actionIcon(icon: String, description: String, onClick: () -> Unit) {
+            fun actionIcon(icon: String, description: String, onClick: (View) -> Unit) {
                 val item = TextView(this@MainActivity).apply {
                     text = icon
                     textSize = 18f
@@ -269,23 +275,24 @@ class MainActivity : Activity() {
                     contentDescription = description
                     isClickable = true
                     isFocusable = true
-                    setOnClickListener { onClick() }
+                    setOnClickListener { onClick(this) }
                 }
                 actions.addView(item, LinearLayout.LayoutParams(dp(38), dp(34)))
             }
-            actionIcon("▢", "Nusxa olish") {
+            // ChatGPT tartibi: Nusxa, Yoqdi, Yoqmadi, Ovoz, Ulashish, Qo‘shimcha.
+            actionIcon("📋", "Nusxa olish") { _ ->
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 clipboard.setPrimaryClip(android.content.ClipData.newPlainText("ARION javobi", message))
                 Toast.makeText(this, "Matn nusxalandi", Toast.LENGTH_SHORT).show()
             }
-            actionIcon("◖))", "Ovoz chiqarib o‘qish") { speak(message) }
-            actionIcon("＋", "Yoqdi") {
+            actionIcon("👍", "Yoqdi") { _ ->
                 Toast.makeText(this, "Fikringiz qabul qilindi", Toast.LENGTH_SHORT).show()
             }
-            actionIcon("－", "Yoqmadi") {
+            actionIcon("👎", "Yoqmadi") { _ ->
                 Toast.makeText(this, "Fikringiz qabul qilindi", Toast.LENGTH_SHORT).show()
             }
-            actionIcon("↗", "Ulashish") {
+            actionIcon("🔊", "Ovoz chiqarib o‘qish") { _ -> speak(message) }
+            actionIcon("🔗", "Ulashish") { _ ->
                 try {
                     val share = Intent(Intent.ACTION_SEND).apply {
                         type = "text/plain"
@@ -296,9 +303,28 @@ class MainActivity : Activity() {
                     Toast.makeText(this, "Ulashish oynasi ochilmadi", Toast.LENGTH_SHORT).show()
                 }
             }
-            actionIcon("↻", "Qayta javob olish") {
-                val question = lastUserQuestion
-                if (question.isNotBlank() && !waitingForAnswer) askBackend(question, true)
+            actionIcon("⋮", "Qo‘shimcha amallar") { anchor ->
+                val more = PopupMenu(this@MainActivity, anchor)
+                more.menu.add("Qayta yaratish").setOnMenuItemClickListener {
+                    val question = lastUserQuestion
+                    if (question.isNotBlank() && !waitingForAnswer) askBackend(question, true)
+                    true
+                }
+                more.menu.add("Nusxa olish").setOnMenuItemClickListener {
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("ARION javobi", message))
+                    Toast.makeText(this, "Matn nusxalandi", Toast.LENGTH_SHORT).show()
+                    true
+                }
+                more.menu.add("Ulashish").setOnMenuItemClickListener {
+                    val share = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, message)
+                    }
+                    startActivity(Intent.createChooser(share, "Javobni ulashish"))
+                    true
+                }
+                more.show()
             }
             val actionLp = LinearLayout.LayoutParams(-1, -2)
             actionLp.setMargins(dp(0), dp(0), dp(0), dp(5))
