@@ -29,6 +29,14 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
+import java.security.KeyStore
 import kotlin.concurrent.thread
 import kotlin.math.abs
 
@@ -55,6 +63,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var agentMode = false
     private var pendingTxtContent = ""
     private var pendingTxtName = "arion_eslatma.txt"
+    private val chatHistory = mutableListOf<JSONObject>()
+    private val groqModel = "qwen/qwen3.8-27b"
+    private val groqUrl = "https://api.groq.com/openai/v1/chat/completions"
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun rounded(color: Int, radius: Int): GradientDrawable =
@@ -92,6 +103,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val menu = actionText("☰", Color.WHITE, Color.rgb(35,35,35), 24) {
             val popup = PopupMenu(this@MainActivity, it)
             popup.menu.add("Yangi suhbat").setOnMenuItemClickListener { newChat(); true }
+            popup.menu.add("Groq API kalitini sozlash").setOnMenuItemClickListener { showApiKeyDialog(); true }
             popup.menu.add("Rasm tanlash").setOnMenuItemClickListener { chooseImage(); true }
             popup.menu.add("Xotira").setOnMenuItemClickListener { openMemory(); true }
             popup.menu.add("Agent rejimi").setOnMenuItemClickListener { toggleAgentMode(); true }
@@ -410,6 +422,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private fun newChat() {
+        chatHistory.clear()
         chat.removeAllViews()
         addMessage("ARION", "Yangi suhbat boshlandi. Sizga qanday yordam beray?")
     }
@@ -428,39 +441,139 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             .hideSoftInputFromWindow(input.windowToken, 0)
     }
 
+
+    // API kaliti Android Keystore AES-GCM bilan shifrlanib, faqat shu ilova ichida saqlanadi.
+    private fun keystoreKey(): SecretKey {
+        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        val alias = "arion_groq_key_v1"
+        val existing = ks.getKey(alias, null) as? SecretKey
+        if (existing != null) return existing
+        val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+        generator.init(KeyGenParameterSpec.Builder(alias,
+            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setRandomizedEncryptionRequired(true).build())
+        return generator.generateKey()
+    }
+
+    private fun saveApiKey(value: String) {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, keystoreKey())
+        val encrypted = cipher.doFinal(value.trim().toByteArray(Charsets.UTF_8))
+        getSharedPreferences("arion_secure", Context.MODE_PRIVATE).edit()
+            .putString("groq_iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+            .putString("groq_key", Base64.encodeToString(encrypted, Base64.NO_WRAP)).apply()
+    }
+
+    private fun readApiKey(): String? = try {
+        val prefs = getSharedPreferences("arion_secure", Context.MODE_PRIVATE)
+        val ivText = prefs.getString("groq_iv", null) ?: return null
+        val keyText = prefs.getString("groq_key", null) ?: return null
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, keystoreKey(),
+            GCMParameterSpec(128, Base64.decode(ivText, Base64.NO_WRAP)))
+        String(cipher.doFinal(Base64.decode(keyText, Base64.NO_WRAP)), Charsets.UTF_8).takeIf { it.isNotBlank() }
+    } catch (_: Exception) { null }
+
+    private fun showApiKeyDialog(onSaved: (() -> Unit)? = null) {
+        val field = EditText(this).apply {
+            hint = "gsk_..."
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(4))
+            addView(TextView(this@MainActivity).apply {
+                text = "Groq API kalitini bir marta kiriting. Kalit telefonda Android Keystore orqali shifrlanib saqlanadi."
+                textSize = 13f
+                setTextColor(Color.DKGRAY)
+            })
+            addView(field)
+        }
+        val dialog = android.app.AlertDialog.Builder(this).setTitle("ARION — API kaliti")
+            .setView(box).setPositiveButton("SAQLASH", null).setNegativeButton("BEKOR", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val value = field.text.toString().trim()
+                if (!value.startsWith("gsk_") || value.length < 20) {
+                    field.error = "Groq API kalitini to‘liq kiriting"
+                    return@setOnClickListener
+                }
+                try {
+                    saveApiKey(value)
+                    dialog.dismiss()
+                    Toast.makeText(this, "API kaliti xavfsiz saqlandi", Toast.LENGTH_SHORT).show()
+                    onSaved?.invoke()
+                } catch (e: Exception) {
+                    field.error = "Saqlash xatosi: " + (e.localizedMessage ?: "noma'lum")
+                }
+            }
+        }
+        dialog.show()
+    }
+
     private fun askBackend(question: String, speakAnswer: Boolean) {
+        val apiKey = readApiKey()
+        if (apiKey.isNullOrBlank()) {
+            showApiKeyDialog { askBackend(question, speakAnswer) }
+            return
+        }
         waitingForAnswer = true
         status.text = "ARION javob tayyorlamoqda…"
         thread {
             var answer: String
             try {
-                val conn = (URL("http://127.0.0.1:8765/ask").openConnection() as HttpURLConnection)
+                val messages = org.json.JSONArray()
+                messages.put(JSONObject().put("role", "system").put("content",
+                    "Siz ARION nomli aqlli yordamchisiz. Foydalanuvchiga o‘zbek tilida, hurmat bilan va aniq javob bering. Foydalanuvchining ismi Sardor."))
+                synchronized(chatHistory) { chatHistory.takeLast(24).forEach { messages.put(it) } }
+                messages.put(JSONObject().put("role", "user").put("content", question))
+                val payload = JSONObject().put("model", groqModel).put("messages", messages)
+                    .put("temperature", 0.7).put("max_completion_tokens", 2500)
+                    .put("reasoning_effort", "none")
+                val conn = URL(groqUrl).openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
-                conn.connectTimeout = 5000
-                conn.readTimeout = 95000
+                conn.connectTimeout = 20000
+                conn.readTimeout = 90000
                 conn.doOutput = true
+                conn.setRequestProperty("Authorization", "Bearer " + apiKey)
                 conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                val body = JSONObject().put("question", question).toString().toByteArray(Charsets.UTF_8)
-                conn.outputStream.use { it.write(body) }
+                conn.setRequestProperty("Accept", "application/json")
+                conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
                 val code = conn.responseCode
                 val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-                val response = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                val json = JSONObject(response)
-                if (code in 200..299) answer = json.optString("answer", "ARION bo‘sh javob oldi.")
-                else answer = json.optString("error", "Server xatosi: $code")
+                val response = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
                 conn.disconnect()
+                val json = JSONObject(response.ifBlank { "{}" })
+                if (code in 200..299) {
+                    answer = json.getJSONArray("choices").getJSONObject(0)
+                        .getJSONObject("message").optString("content", "ARION bo‘sh javob oldi.")
+                    synchronized(chatHistory) {
+                        chatHistory.add(JSONObject().put("role", "user").put("content", question))
+                        chatHistory.add(JSONObject().put("role", "assistant").put("content", answer))
+                        while (chatHistory.size > 30) chatHistory.removeAt(0)
+                    }
+                } else {
+                    val detail = json.optJSONObject("error")?.optString("message")
+                        ?: json.optString("message", response.take(500))
+                    answer = when (code) {
+                        401 -> "Groq API kaliti noto‘g‘ri yoki bekor qilingan. Menyudan API kalitini yangilang."
+                        429 -> "Groq so‘rov limiti tugadi. Biroz kutib qayta urinib ko‘ring."
+                        else -> "Groq xatosi ($code): $detail"
+                    }
+                }
             } catch (e: Exception) {
-                answer = "ARION serveriga ulanib bo‘lmadi. Pydroid 3 ichida ARION serverini ishga tushiring (127.0.0.1:8765)."
+                answer = "Internet yoki Groq serveriga ulanish xatosi: " +
+                    (e.localizedMessage ?: e.javaClass.simpleName)
             }
             runOnUiThread {
                 waitingForAnswer = false
                 status.text = ""
                 addMessage("ARION", answer)
-                if (speakAnswer && liveMode) {
-                    speak(answer)
-                } else if (liveMode) {
-                    resumeLiveListening()
-                }
+                if (speakAnswer && liveMode) speak(answer)
+                else if (liveMode) resumeLiveListening()
             }
         }
     }
