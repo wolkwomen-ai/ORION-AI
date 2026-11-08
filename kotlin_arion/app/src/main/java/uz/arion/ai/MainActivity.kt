@@ -103,6 +103,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             popup.show()
         }
         header.addView(menu, LinearLayout.LayoutParams(dp(48), dp(48)))
+        header.addView(OrbView(this), LinearLayout.LayoutParams(dp(40), dp(40)))
         val titleBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
         titleBox.addView(TextView(this).apply {
             text = "ARION"; textSize = 19f; setTextColor(Color.rgb(30,30,30)); gravity = Gravity.CENTER
@@ -694,116 +695,137 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         super.onDestroy()
     }
 
+    // ARION premium animated A-mark: metallic 3D monogram, energy core and orbital rings.
     private inner class OrbView(context: Context) : View(context) {
         private var rotation = 0f
-        private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val spherePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val edgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+        }
+        private val facePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+        }
         private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            strokeWidth = dp(2).toFloat()
-            color = Color.rgb(111, 220, 255)
-            alpha = 210
-        }
-        private val networkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.STROKE
             strokeWidth = dp(1).toFloat()
-            color = Color.rgb(190, 244, 255)
-            alpha = 155
+            color = Color.rgb(76, 190, 255)
+            alpha = 205
         }
+        private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         private val nodePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
-            color = Color.WHITE
-        }
-        private val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            style = Paint.Style.FILL
-            color = Color.WHITE
-            alpha = 125
+            color = Color.rgb(210, 247, 255)
         }
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             val cx = width / 2f
             val cy = height / 2f
-            val base = minOf(width, height) * 0.31f
-            val radius = base + lastRms.coerceIn(0f, 12f) * resources.displayMetrics.density * 0.35f
-            val glowRadius = radius * 1.48f
+            val unit = minOf(width, height).toFloat()
+            if (unit <= 0f) return
+            val scale = unit / 100f
+            val pulse = 1f + 0.025f * kotlin.math.sin(Math.toRadians(rotation.toDouble())).toFloat()
+            val s = scale * pulse
 
+            // Subtle blue aura behind the metal mark.
             glowPaint.shader = android.graphics.RadialGradient(
-                cx, cy, glowRadius,
-                intArrayOf(0x663ABEFF, 0x22318BFF, Color.TRANSPARENT),
-                floatArrayOf(0f, 0.58f, 1f), android.graphics.Shader.TileMode.CLAMP
+                cx, cy, unit * 0.49f,
+                intArrayOf(0x6644BFFF, 0x223A8FFF, Color.TRANSPARENT),
+                floatArrayOf(0f, 0.62f, 1f), android.graphics.Shader.TileMode.CLAMP
             )
-            canvas.drawCircle(cx, cy, glowRadius, glowPaint)
+            canvas.drawCircle(cx, cy, unit * 0.49f, glowPaint)
 
-            spherePaint.shader = android.graphics.RadialGradient(
-                cx - radius * 0.34f, cy - radius * 0.38f, radius * 1.55f,
+            val orbitRect = android.graphics.RectF(
+                cx - unit * 0.47f, cy - unit * 0.19f,
+                cx + unit * 0.47f, cy + unit * 0.19f
+            )
+            val orbitSave = canvas.save()
+            canvas.rotate(rotation, cx, cy)
+            ringPaint.strokeWidth = maxOf(1f, unit * 0.018f)
+            ringPaint.alpha = 125
+            canvas.drawOval(orbitRect, ringPaint)
+            canvas.rotate(58f, cx, cy)
+            ringPaint.alpha = 205
+            canvas.drawOval(orbitRect, ringPaint)
+            canvas.restoreToCount(orbitSave)
+
+            val markSave = canvas.save()
+            canvas.translate(cx, cy)
+            canvas.scale(s, s)
+
+            val aPath = Path().apply {
+                moveTo(-29f, 32f)
+                lineTo(-5f, -30f)
+                quadTo(0f, -40f, 5f, -30f)
+                lineTo(29f, 32f)
+            }
+            val barPath = Path().apply {
+                moveTo(-17f, 12f)
+                quadTo(0f, 7f, 17f, 12f)
+            }
+
+            // Dark offset extrusion gives the A a machined, dimensional edge.
+            canvas.save()
+            canvas.translate(2.4f, 3.2f)
+            edgePaint.color = Color.rgb(2, 13, 36)
+            edgePaint.strokeWidth = 12.5f
+            edgePaint.alpha = 245
+            canvas.drawPath(aPath, edgePaint)
+            canvas.drawPath(barPath, edgePaint)
+            canvas.restore()
+
+            // Main polished titanium face with a cool blue reflection.
+            facePaint.shader = android.graphics.LinearGradient(
+                -28f, -34f, 28f, 35f,
                 intArrayOf(
-                    Color.rgb(218, 250, 255),
-                    Color.rgb(69, 190, 255),
-                    Color.rgb(20, 91, 190),
-                    Color.rgb(5, 25, 76)
+                    Color.rgb(245, 253, 255),
+                    Color.rgb(117, 211, 255),
+                    Color.rgb(35, 105, 190),
+                    Color.rgb(220, 245, 255)
                 ),
-                floatArrayOf(0f, 0.28f, 0.68f, 1f),
+                floatArrayOf(0f, 0.34f, 0.72f, 1f),
                 android.graphics.Shader.TileMode.CLAMP
             )
-            canvas.drawCircle(cx, cy, radius, spherePaint)
-            spherePaint.shader = null
+            facePaint.strokeWidth = 8.5f
+            facePaint.alpha = 255
+            canvas.drawPath(aPath, facePaint)
+            canvas.drawPath(barPath, facePaint)
+            facePaint.shader = null
 
-            val save = canvas.save()
-            canvas.rotate(rotation, cx, cy)
-            val orbit = android.graphics.RectF(
-                cx - radius * 1.34f, cy - radius * 0.43f,
-                cx + radius * 1.34f, cy + radius * 0.43f
-            )
-            ringPaint.alpha = 210
-            canvas.drawOval(orbit, ringPaint)
-            canvas.rotate(62f, cx, cy)
-            canvas.drawOval(orbit, ringPaint)
-            canvas.restoreToCount(save)
+            // Fine white specular edge.
+            facePaint.color = Color.WHITE
+            facePaint.alpha = 145
+            facePaint.strokeWidth = 1.35f
+            canvas.drawPath(aPath, facePaint)
+            facePaint.alpha = 95
+            canvas.drawPath(barPath, facePaint)
 
-            // Neural network: luminous nodes and connecting paths on the sphere.
-            val points = arrayOf(
-                Pair(-0.62f, -0.30f), Pair(-0.28f, -0.58f), Pair(0.18f, -0.52f),
-                Pair(0.58f, -0.24f), Pair(-0.48f, 0.12f), Pair(-0.08f, 0.02f),
-                Pair(0.36f, 0.12f), Pair(-0.26f, 0.53f), Pair(0.22f, 0.52f),
-                Pair(0.63f, 0.42f)
+            // Energy core embedded in the A crossbar.
+            val coreRadius = 7.2f + lastRms.coerceIn(0f, 12f) * 0.18f
+            glowPaint.shader = android.graphics.RadialGradient(
+                0f, 10f, coreRadius * 2.5f,
+                intArrayOf(Color.WHITE, 0xFF72D8FF.toInt(), 0x003B9DFF),
+                floatArrayOf(0f, 0.36f, 1f), android.graphics.Shader.TileMode.CLAMP
             )
-            val links = arrayOf(
-                intArrayOf(0,1), intArrayOf(1,2), intArrayOf(2,3), intArrayOf(0,4),
-                intArrayOf(4,5), intArrayOf(5,6), intArrayOf(6,3), intArrayOf(4,7),
-                intArrayOf(7,8), intArrayOf(8,9), intArrayOf(5,8), intArrayOf(2,6)
-            )
-            val coords = points.map { Pair(cx + it.first * radius, cy + it.second * radius) }
-            val networkSave = canvas.save()
-            canvas.rotate(rotation * 0.42f, cx, cy)
-            links.forEach { link ->
-                val a = coords[link[0]]
-                val b = coords[link[1]]
-                canvas.drawLine(a.first, a.second, b.first, b.second, networkPaint)
-            }
-            coords.forEachIndexed { index, point ->
-                val r = if (index == 5) dp(4).toFloat() else resources.displayMetrics.density * 2.6f
-                canvas.drawCircle(point.first, point.second, r + dp(2).toFloat(), glowPaint)
-                canvas.drawCircle(point.first, point.second, r, nodePaint)
-            }
-            canvas.restoreToCount(networkSave)
+            canvas.drawCircle(0f, 10f, coreRadius * 2.5f, glowPaint)
+            glowPaint.shader = null
+            nodePaint.color = Color.WHITE
+            canvas.drawCircle(0f, 10f, coreRadius * 0.34f, nodePaint)
 
-            // Soft glass highlight and a bright central energy core.
-            val shine = android.graphics.RectF(
-                cx - radius * 0.68f, cy - radius * 0.78f,
-                cx - radius * 0.08f, cy - radius * 0.20f
-            )
-            canvas.drawOval(shine, highlightPaint)
-            val core = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                shader = android.graphics.RadialGradient(
-                    cx, cy, radius * 0.30f,
-                    intArrayOf(Color.WHITE, 0xCC8DEBFF.toInt(), 0x008DEBFF.toInt()),
-                    null, android.graphics.Shader.TileMode.CLAMP
-                )
-            }
-            canvas.drawCircle(cx, cy, radius * 0.30f, core)
+            // Orbiting energy particles.
+            val radians = Math.toRadians((rotation * 1.7f).toDouble())
+            val px = kotlin.math.cos(radians).toFloat() * 39f
+            val py = kotlin.math.sin(radians).toFloat() * 15f
+            nodePaint.color = Color.rgb(150, 231, 255)
+            canvas.drawCircle(px, py, 2.5f, nodePaint)
+            canvas.drawCircle(-px, -py, 1.7f, nodePaint)
 
-            rotation = (rotation + 0.65f + lastRms.coerceIn(0f, 12f) * 0.025f) % 360f
+            canvas.restoreToCount(markSave)
+
+            rotation = (rotation + 0.72f + lastRms.coerceIn(0f, 12f) * 0.035f) % 360f
             postInvalidateDelayed(32)
         }
     }
