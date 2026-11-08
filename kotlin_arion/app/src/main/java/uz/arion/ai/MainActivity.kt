@@ -14,7 +14,9 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.speech.tts.TextToSpeech
+import android.media.MediaPlayer
+import io.github.whitemagic2014.tts.TTS as EdgeTTS
+import io.github.whitemagic2014.tts.TTSVoice
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -26,13 +28,13 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import org.json.JSONObject
+import org.json.JSONArray
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.Locale
 import kotlin.concurrent.thread
 import kotlin.math.abs
 
-class MainActivity : Activity(), TextToSpeech.OnInitListener {
+class MainActivity : Activity() {
     private lateinit var root: FrameLayout
     private lateinit var chat: LinearLayout
     private lateinit var scroll: ScrollView
@@ -42,11 +44,12 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var sendButton: TextView
     private lateinit var voiceButton: TextView
     private var recognizer: SpeechRecognizer? = null
-    private var tts: TextToSpeech? = null
-    private var ttsReady = false
+    private var lastUserQuestion = ""
+    private var edgePlayer: MediaPlayer? = null
     private var listening = false
     private var liveMode = false
     private var voicePanel: View? = null
+    private var voiceDock: View? = null
     private var orb: OrbView? = null
     private var lastRms = 0f
     private var waitingForAnswer = false
@@ -74,9 +77,11 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
             WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
-        tts = TextToSpeech(this, this)
         buildScreen()
         addMessage("ARION", "Assalomu alaykum! Men ARIONman. Sizga qanday yordam beray?")
+        if (getSharedPreferences("arion_config", Context.MODE_PRIVATE).getString("groq_api_key", "").isNullOrBlank()) {
+            root.postDelayed({ showApiKeyDialog() }, 500)
+        }
     }
 
     private fun buildScreen() {
@@ -100,6 +105,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             popup.menu.add("Internet qidiruvi").setOnMenuItemClickListener { openInternetSearch(); true }
             popup.menu.add("Telefon sozlamalari").setOnMenuItemClickListener { openPhoneSettings(); true }
             popup.menu.add("Ovozli suhbat").setOnMenuItemClickListener { openVoiceMode(); true }
+            popup.menu.add("API kalitni ulash").setOnMenuItemClickListener { showApiKeyDialog(); true }
             popup.show()
         }
         header.addView(menu, LinearLayout.LayoutParams(dp(48), dp(48)))
@@ -112,7 +118,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             text = "AI yordamchi"; textSize = 11f; setTextColor(Color.GRAY); gravity = Gravity.CENTER
         })
         header.addView(titleBox, LinearLayout.LayoutParams(0, -2, 1f))
-        val memoryButton = actionText("◉", Color.WHITE, Color.rgb(16,163,127), 23) { openMemory() }
+        val memoryButton = actionText("＋", Color.WHITE, Color.rgb(35,35,35), 27) { newChat() }
         header.addView(memoryButton, LinearLayout.LayoutParams(dp(48), dp(48)))
         page.addView(header)
 
@@ -142,8 +148,12 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             }
             elevation = dp(1).toFloat()
         }
-        val plus = actionText("+", Color.rgb(235,235,235), Color.rgb(35,35,35), 27) {
-            Toast.makeText(this, "Qo‘shimcha imkoniyatlar keyingi bosqichda ulanadi", Toast.LENGTH_SHORT).show()
+        val plus = actionText("+", Color.rgb(235,235,235), Color.rgb(35,35,35), 27) { anchor ->
+            val menu = PopupMenu(this@MainActivity, anchor)
+            menu.menu.add("Rasm tanlash").setOnMenuItemClickListener { chooseImage(); true }
+            menu.menu.add("Xotira").setOnMenuItemClickListener { openMemory(); true }
+            menu.menu.add("Yangi suhbat").setOnMenuItemClickListener { newChat(); true }
+            menu.show()
         }
         composer.addView(plus, LinearLayout.LayoutParams(dp(40), dp(40)))
 
@@ -169,7 +179,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         micButton = actionText("🎙", Color.TRANSPARENT, Color.rgb(20,20,20), 19) { startDictation() }
         composer.addView(micButton, LinearLayout.LayoutParams(dp(40), dp(40)))
 
-        sendButton = actionText("≋", Color.rgb(37,99,235), Color.WHITE, 23) {
+        sendButton = actionText("◖", Color.rgb(37,99,235), Color.WHITE, 23) {
             if (input.text.toString().trim().isNotEmpty()) sendMessage() else openVoiceMode()
         }
         composer.addView(sendButton, LinearLayout.LayoutParams(dp(42), dp(42)))
@@ -178,7 +188,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val hasText = !s.isNullOrBlank()
-                sendButton.text = if (hasText) "↑" else "≋"
+                sendButton.text = if (hasText) "↑" else "◖"
                 sendButton.contentDescription = if (hasText) "Yuborish" else "Ovozli suhbat"
             }
             override fun afterTextChanged(s: android.text.Editable?) {}
@@ -238,8 +248,62 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             ))
         }
         val lp = LinearLayout.LayoutParams(-1, -2)
-        lp.setMargins(dp(2), dp(4), dp(2), dp(4))
+        lp.setMargins(dp(2), dp(4), dp(2), dp(0))
         chat.addView(row, lp)
+
+        if (!isUser) {
+            val actions = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                setPadding(dp(0), dp(0), dp(0), dp(0))
+            }
+            fun actionIcon(icon: String, description: String, onClick: () -> Unit) {
+                val item = TextView(this@MainActivity).apply {
+                    text = icon
+                    textSize = 18f
+                    gravity = Gravity.CENTER
+                    setTextColor(Color.rgb(115, 115, 115))
+                    minWidth = dp(34)
+                    minHeight = dp(34)
+                    setPadding(dp(5), dp(3), dp(5), dp(3))
+                    contentDescription = description
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener { onClick() }
+                }
+                actions.addView(item, LinearLayout.LayoutParams(dp(38), dp(34)))
+            }
+            actionIcon("▢", "Nusxa olish") {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("ARION javobi", message))
+                Toast.makeText(this, "Matn nusxalandi", Toast.LENGTH_SHORT).show()
+            }
+            actionIcon("◖))", "Ovoz chiqarib o‘qish") { speak(message) }
+            actionIcon("＋", "Yoqdi") {
+                Toast.makeText(this, "Fikringiz qabul qilindi", Toast.LENGTH_SHORT).show()
+            }
+            actionIcon("－", "Yoqmadi") {
+                Toast.makeText(this, "Fikringiz qabul qilindi", Toast.LENGTH_SHORT).show()
+            }
+            actionIcon("↗", "Ulashish") {
+                try {
+                    val share = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, message)
+                    }
+                    startActivity(Intent.createChooser(share, "Javobni ulashish"))
+                } catch (_: Exception) {
+                    Toast.makeText(this, "Ulashish oynasi ochilmadi", Toast.LENGTH_SHORT).show()
+                }
+            }
+            actionIcon("↻", "Qayta javob olish") {
+                val question = lastUserQuestion
+                if (question.isNotBlank() && !waitingForAnswer) askBackend(question, true)
+            }
+            val actionLp = LinearLayout.LayoutParams(-1, -2)
+            actionLp.setMargins(dp(0), dp(0), dp(0), dp(5))
+            chat.addView(actions, actionLp)
+        }
         scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
     }
 
@@ -419,13 +483,54 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         if (question.isEmpty() || waitingForAnswer) return
         input.setText("")
         hideKeyboard()
+        lastUserQuestion = question
         addMessage("Siz", question)
-        askBackend(question, false)
+        askBackend(question, true)
     }
 
     private fun hideKeyboard() {
         (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
             .hideSoftInputFromWindow(input.windowToken, 0)
+    }
+
+    private fun showApiKeyDialog() {
+        val editor = EditText(this).apply {
+            hint = "Groq API kalitini shu yerga joylang"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+            textSize = 15f
+        }
+        val current = getSharedPreferences("arion_config", Context.MODE_PRIVATE)
+            .getString("groq_api_key", "").orEmpty()
+        if (current.isNotBlank()) editor.setText(current)
+        val note = TextView(this).apply {
+            text = "Pydroid 3 endi kerak emas. ARION Groq serveriga to‘g‘ridan-to‘g‘ri ulanadi. Pydroid ichidagi orion_key.txt faylida turgan kalitni nusxalab shu yerga joylang. Kalit faqat shu telefonda saqlanadi."
+            textSize = 13f
+            setTextColor(Color.DKGRAY)
+            setPadding(0, 0, 0, dp(10))
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(4))
+            addView(note)
+            addView(editor)
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("ARION — API KALIT")
+            .setView(box)
+            .setPositiveButton("SAQLASH") { _, _ ->
+                val key = editor.text.toString().trim()
+                if (key.isBlank()) {
+                    Toast.makeText(this, "API kalit kiritilmadi", Toast.LENGTH_LONG).show()
+                } else {
+                    getSharedPreferences("arion_config", Context.MODE_PRIVATE)
+                        .edit().putString("groq_api_key", key).apply()
+                    Toast.makeText(this, "API kalit telefonda saqlandi", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton("BEKOR", null)
+            .show()
     }
 
     private fun askBackend(question: String, speakAnswer: Boolean) {
@@ -434,29 +539,59 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         thread {
             var answer: String
             try {
-                val conn = (URL("http://127.0.0.1:8765/ask").openConnection() as HttpURLConnection)
+                val prefs = getSharedPreferences("arion_config", Context.MODE_PRIVATE)
+                val apiKey = prefs.getString("groq_api_key", "").orEmpty().trim()
+                if (apiKey.isBlank()) throw IllegalStateException("API kalit ulanmagan. ☰ menyudan «API kalitni ulash» bo‘limini oching.")
+                val historyPrefs = getSharedPreferences("arion_chat", Context.MODE_PRIVATE)
+                val saved = try { JSONArray(historyPrefs.getString("messages", "[]")) } catch (_: Exception) { JSONArray() }
+                val messages = org.json.JSONArray()
+                messages.put(JSONObject()
+                    .put("role", "system")
+                    .put("content", "Sen ARION nomli ilg‘or shaxsiy sun’iy intellekt yordamchisisan. Foydalanuvchiga o‘zbek tilida ravon, aniq va foydali javob ber. O‘zbek imlosida o‘ va g‘ harflarini to‘g‘ri yoz. Oddiy savollarga ixcham javob ber, batafsil so‘ralsa keng tushuntir. Bilmagan narsangni to‘qima. Kod so‘ralsa to‘liq va ishlatishga tayyor kod ber. API kalitlarni oshkor qilma."))
+                val from = maxOf(0, saved.length() - 16)
+                for (i in from until saved.length()) messages.put(saved.getJSONObject(i))
+                messages.put(JSONObject().put("role", "user").put("content", question))
+                val payload = JSONObject()
+                    .put("model", "qwen/qwen3.8-27b")
+                    .put("messages", messages)
+                    .put("temperature", 0.6)
+                    .put("max_completion_tokens", 1400)
+                val conn = (URL("https://api.groq.com/openai/v1/chat/completions").openConnection() as HttpURLConnection)
                 conn.requestMethod = "POST"
-                conn.connectTimeout = 5000
+                conn.connectTimeout = 15000
                 conn.readTimeout = 95000
                 conn.doOutput = true
+                conn.setRequestProperty("Authorization", "Bearer $apiKey")
                 conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                val body = JSONObject().put("question", question).toString().toByteArray(Charsets.UTF_8)
-                conn.outputStream.use { it.write(body) }
+                conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
                 val code = conn.responseCode
                 val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-                val response = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val response = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
                 val json = JSONObject(response)
-                if (code in 200..299) answer = json.optString("answer", "ARION bo‘sh javob oldi.")
-                else answer = json.optString("error", "Server xatosi: $code")
+                if (code !in 200..299) {
+                    val detail = json.optJSONObject("error")?.optString("message")
+                        ?: "HTTP $code"
+                    throw IllegalStateException("Groq xatosi ($code): $detail")
+                }
+                answer = json.optJSONArray("choices")?.optJSONObject(0)
+                    ?.optJSONObject("message")?.optString("content")
+                    ?.takeIf { it.isNotBlank() } ?: "ARION bo‘sh javob oldi."
+                val updated = JSONArray()
+                val keepFrom = maxOf(0, saved.length() - 28)
+                for (i in keepFrom until saved.length()) updated.put(saved.getJSONObject(i))
+                updated.put(JSONObject().put("role", "user").put("content", question))
+                updated.put(JSONObject().put("role", "assistant").put("content", answer))
+                historyPrefs.edit().putString("messages", updated.toString()).apply()
                 conn.disconnect()
             } catch (e: Exception) {
-                answer = "ARION serveriga ulanib bo‘lmadi. Pydroid 3 ichida ARION serverini ishga tushiring (127.0.0.1:8765)."
+                answer = e.message ?: "Internet yoki AI server bilan aloqa xatosi."
             }
             runOnUiThread {
                 waitingForAnswer = false
                 status.text = ""
                 addMessage("ARION", answer)
-                if (speakAnswer && liveMode) {
+                if (answer.contains("API kalit ulanmagan")) showApiKeyDialog()
+                if (speakAnswer) {
                     speak(answer)
                 } else if (liveMode) {
                     resumeLiveListening()
@@ -506,6 +641,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     val phrase = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
                     if (phrase.isNotBlank()) {
                         if (liveMode) {
+                            lastUserQuestion = phrase
                             addMessage("Siz", phrase)
                             askBackend(phrase, true)
                         } else {
@@ -566,67 +702,106 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private fun showVoicePanel() {
-        val panel = LinearLayout(this).apply {
+        voiceDock?.let { root.removeView(it) }
+        voiceDock = null
+        // Ovoz oynasi butun ekran bo‘ylab: tashqi karta/ramka chizilmaydi.
+        val scrim = FrameLayout(this).apply {
+            setBackgroundColor(Color.WHITE)
+            clipChildren = false
+            clipToPadding = false
+        }
+        val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(dp(24), dp(24), dp(24), dp(28))
-            background = rounded(Color.rgb(249,249,249), 30).apply {
-                setStroke(dp(1), Color.rgb(230,230,230))
-            }
-            elevation = dp(12).toFloat()
+            setPadding(0, dp(10), 0, dp(20))
+            background = null
+            clipChildren = false
+            clipToPadding = false
         }
-        val top = TextView(this).apply {
-            text = "ARION bilan ovozli suhbat"
-            textSize = 19f
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(TextView(this).apply {
+            text = "ARION"; textSize = 18f; gravity = Gravity.CENTER
             setTextColor(Color.rgb(35,35,35))
-            gravity = Gravity.CENTER
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+        column.addView(header)
+        val center = FrameLayout(this).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            background = null
+            clipChildren = false
+            clipToPadding = false
+            clipToOutline = false
         }
-        panel.addView(top, LinearLayout.LayoutParams(-1, dp(44)))
-        orb = OrbView(this)
-        panel.addView(orb, LinearLayout.LayoutParams(dp(190), dp(190)))
+        orb = OrbView(this).apply {
+            background = null
+            clipToOutline = false
+            elevation = 0f
+        }
+        center.addView(orb, FrameLayout.LayoutParams(dp(360), dp(360), Gravity.CENTER))
+        var dragStartY = 0f
+        center.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> { dragStartY = event.rawY; true }
+                MotionEvent.ACTION_UP -> {
+                    val delta = event.rawY - dragStartY
+                    if (delta > dp(65)) dockVoicePanel()
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> true
+                else -> true
+            }
+        }
+        column.addView(center, LinearLayout.LayoutParams(-1, 0, 1f))
         val hint = TextView(this).apply {
             text = "Gapiring — ARION tinglayapti"
-            textSize = 14f
-            setTextColor(Color.DKGRAY)
+            textSize = 15f
+            setTextColor(Color.rgb(105, 105, 105))
             gravity = Gravity.CENTER
         }
-        panel.addView(hint, LinearLayout.LayoutParams(-1, dp(42)))
-        val buttons = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL }
-        val mute = actionText("Ⅱ", Color.rgb(230,230,230), Color.DKGRAY, 22) {
-            voicePaused = true
-            if (listening) recognizer?.cancel()
-            listening = false
-            status.text = "Mikrofon pauzada"
-            hint.text = "Davom ettirish uchun mikrofonni bosing"
-        }
-        val end = actionText("×", Color.rgb(210,55,55), Color.WHITE, 28) { closeVoiceMode() }
-        val resume = actionText("🎙", Color.rgb(16,163,127), Color.WHITE, 20) { resumeLiveListening() }
-        buttons.addView(mute, LinearLayout.LayoutParams(dp(54), dp(54)).apply { rightMargin = dp(18) })
-        buttons.addView(end, LinearLayout.LayoutParams(dp(54), dp(54)).apply { rightMargin = dp(18) })
-        buttons.addView(resume, LinearLayout.LayoutParams(dp(54), dp(54)))
-        panel.addView(buttons)
-        panel.setOnTouchListener(object : View.OnTouchListener {
-            var downY = 0f
-            override fun onTouch(v: View, event: MotionEvent): Boolean {
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> { downY = event.rawY; return true }
-                    MotionEvent.ACTION_UP -> {
-                        val delta = event.rawY - downY
-                        if (abs(delta) > dp(70)) closeVoiceMode()
-                        return true
-                    }
-                }
-                return true
-            }
+        val footer = FrameLayout(this)
+        footer.addView(hint, FrameLayout.LayoutParams(-1, dp(58), Gravity.CENTER))
+        column.addView(footer, LinearLayout.LayoutParams(-1, dp(64)))
+        scrim.addView(column, FrameLayout.LayoutParams(-1, -1))
+
+        // X tugmasi dumaloq shar yoki ichki panelga emas, ekranning past-o‘ng
+        // burchagiga biriktiriladi.
+        scrim.addView(actionText("×", Color.rgb(245,245,245), Color.DKGRAY, 28) {
+            closeVoiceMode()
+        }, FrameLayout.LayoutParams(dp(52), dp(52), Gravity.RIGHT or Gravity.BOTTOM).apply {
+            rightMargin = dp(18)
+            bottomMargin = dp(18)
         })
-        val scrim = FrameLayout(this).apply { setBackgroundColor(0x66000000) }
-        scrim.addView(panel, FrameLayout.LayoutParams(-1, dp(430), Gravity.BOTTOM).apply {
-            leftMargin = dp(10); rightMargin = dp(10); bottomMargin = dp(12)
-        })
-        scrim.setOnClickListener { closeVoiceMode() }
-        panel.setOnClickListener { }
         voicePanel = scrim
         root.addView(scrim, FrameLayout.LayoutParams(-1, -1))
+    }
+
+    private fun dockVoicePanel() {
+        if (!liveMode) return
+        voicePanel?.let { root.removeView(it) }
+        voicePanel = null
+
+        // Pastga surilganda faqat shar qoladi: u yozish maydoni ustida,
+        // ekranning aynan o‘rtasida turadi. Yonida mikrofon yoki X yo‘q.
+        val dock = FrameLayout(this).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            elevation = dp(4).toFloat()
+        }
+        val miniOrb = OrbView(this)
+        dock.addView(miniOrb, FrameLayout.LayoutParams(dp(88), dp(88), Gravity.CENTER))
+        dock.setOnClickListener {
+            root.removeView(dock)
+            voiceDock = null
+            showVoicePanel()
+        }
+        voiceDock = dock
+        root.addView(dock, FrameLayout.LayoutParams(-1, dp(104), Gravity.BOTTOM).apply {
+            leftMargin = dp(12)
+            rightMargin = dp(12)
+            // Composer ustida joylashadi, yozish maydonini to‘sib qo‘ymaydi.
+            bottomMargin = dp(66)
+        })
     }
 
     private fun resumeLiveListening() {
@@ -638,12 +813,80 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         catch (_: Exception) { status.text = "Mikrofonni qayta yoqish uchun 🎙 bosing" }
     }
 
+    // O‘zbekcha o‘ va g‘ harflarini Edge TTS uchun yagona imloga keltiramiz.
+    private fun normalizeUzbekSpeech(text: String): String {
+        return text.replace(Regex("(?i)(o|g)[‘’ʻʼ\\u02BB\\u02BC\\u0060']")) { match ->
+            match.groupValues[1] + "ʻ"
+        }
+    }
+
+    // Edge TTS: Madina ovozi, biroz tezroq talaffuz va ishonchli MP3 ijrosi.
     private fun speak(text: String) {
-        if (!liveMode || !ttsReady) { if (liveMode) resumeLiveListening(); return }
-        tts?.speak(text.take(3500), TextToSpeech.QUEUE_FLUSH, null, "arion-answer")
-        root.postDelayed({
-            if (liveMode && !waitingForAnswer) resumeLiveListening()
-        }, (text.length.coerceAtMost(3500) * 65L).coerceIn(1800L, 18000L))
+        val speechText = normalizeUzbekSpeech(text).take(3500)
+        status.text = "Madina ovozi tayyorlanmoqda…"
+        thread {
+            try {
+                val voice = TTSVoice.provides()
+                    .firstOrNull { it.shortName == "uz-UZ-MadinaNeural" }
+                    ?: throw IllegalStateException("uz-UZ-MadinaNeural ovozi topilmadi")
+
+                val audio = EdgeTTS(voice, speechText)
+                    .voiceRate("+10%")
+                    .formatMp3()
+                    .transToAudioStream()
+                    ?: throw IllegalStateException("Edge TTS audio qaytarmadi")
+
+                val audioBytes = audio.toByteArray()
+                if (audioBytes.size < 1000) {
+                    throw IllegalStateException("Ovoz fayli bo‘sh yoki to‘liq kelmadi")
+                }
+                val audioFile = java.io.File(cacheDir, "arion_madina.mp3")
+                audioFile.writeBytes(audioBytes)
+
+                runOnUiThread {
+                    if (isFinishing) return@runOnUiThread
+                    try {
+                        edgePlayer?.setOnCompletionListener(null)
+                        edgePlayer?.release()
+                        edgePlayer = MediaPlayer().apply {
+                            setAudioAttributes(
+                                android.media.AudioAttributes.Builder()
+                                    .setUsage(android.media.AudioAttributes.USAGE_ASSISTANT)
+                                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                                    .build()
+                            )
+                            setDataSource(audioFile.absolutePath)
+                            setOnPreparedListener { player ->
+                                status.text = "Madina gapiryapti…"
+                                player.start()
+                            }
+                            setOnCompletionListener { player ->
+                                player.release()
+                                if (edgePlayer === player) edgePlayer = null
+                                status.text = ""
+                                if (liveMode && !waitingForAnswer) resumeLiveListening()
+                            }
+                            setOnErrorListener { player, _, _ ->
+                                player.release()
+                                if (edgePlayer === player) edgePlayer = null
+                                status.text = "Madina ovozini ijro etib bo‘lmadi"
+                                if (liveMode && !waitingForAnswer) resumeLiveListening()
+                                true
+                            }
+                            prepareAsync()
+                        }
+                    } catch (e: Exception) {
+                        status.text = "Madina ovozini ijro etish xatosi: ${e.localizedMessage}"
+                        if (liveMode && !waitingForAnswer) resumeLiveListening()
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    status.text = "Madina ovozi ishlamadi: ${e.localizedMessage ?: "noma’lum xato"}"
+                    if (liveMode && !waitingForAnswer) resumeLiveListening()
+                }
+            }
+        }
     }
 
     private fun closeVoiceMode() {
@@ -651,9 +894,10 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         voicePaused = false
         listening = false
         try { recognizer?.cancel() } catch (_: Exception) {}
-        tts?.stop()
         voicePanel?.let { root.removeView(it) }
         voicePanel = null
+        voiceDock?.let { root.removeView(it) }
+        voiceDock = null
         orb = null
         status.text = ""
     }
@@ -676,46 +920,60 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
     }
 
-    override fun onInit(result: Int) {
-        if (result == TextToSpeech.SUCCESS) {
-            ttsReady = true
-            val code = tts?.setLanguage(Locale("uz", "UZ"))
-            if (code == TextToSpeech.LANG_MISSING_DATA || code == TextToSpeech.LANG_NOT_SUPPORTED) {
-                tts?.setLanguage(Locale("ru", "RU"))
-            }
-        }
-    }
-
     override fun onDestroy() {
         liveMode = false
         try { recognizer?.destroy() } catch (_: Exception) {}
-        tts?.stop()
-        tts?.shutdown()
+        try { edgePlayer?.stop() } catch (_: Exception) {}
+        edgePlayer?.release()
+        edgePlayer = null
         super.onDestroy()
     }
 
     private inner class OrbView(context: Context) : View(context) {
-        private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(16,163,127); style = Paint.Style.FILL }
-        private val glow = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x3310A37F; style = Paint.Style.FILL }
-        private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE; style = Paint.Style.STROKE; strokeWidth = dp(4).toFloat(); strokeCap = Paint.Cap.ROUND
-        }
+        private val orbPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
+            val t = System.currentTimeMillis() / 1000.0
             val cx = width / 2f
             val cy = height / 2f
-            val radius = dp(48).toFloat() + lastRms.coerceIn(0f, 12f) * dp(1).toFloat()
-            canvas.drawCircle(cx, cy, radius + dp(18).toFloat(), glow)
-            canvas.drawCircle(cx, cy, radius, fill)
-            val path = Path()
-            for (i in 0..4) {
-                val x = cx + (i - 2) * dp(13)
-                val h = dp(10).toFloat() + (lastRms.coerceIn(0f, 12f) * dp(2).toFloat()) * (if (i % 2 == 0) 1f else .65f)
-                if (i == 0) path.moveTo(x, cy - h) else path.lineTo(x, cy - h)
-                path.lineTo(x, cy + h)
-            }
-            canvas.drawPath(path, line)
-            postInvalidateDelayed(120)
+            val voice = (lastRms.coerceIn(0f, 12f) / 12f)
+            val breathe = kotlin.math.sin(t * 1.35).toFloat()
+            val radius = minOf(width, height) * (0.445f + voice * 0.025f + breathe * 0.008f)
+            val driftX = kotlin.math.sin(t * 0.55).toFloat() * radius * 0.045f
+            val driftY = kotlin.math.cos(t * 0.72).toFloat() * radius * 0.035f
+
+            // Yumshoq ko‘k nur: chiziq yoki tashqi ramka yo‘q.
+            glowPaint.shader = android.graphics.RadialGradient(
+                cx, cy, radius * 1.75f,
+                intArrayOf(0x665A9BFF, 0x225A9BFF, 0x005A9BFF),
+                floatArrayOf(0f, 0.62f, 1f),
+                android.graphics.Shader.TileMode.CLAMP
+            )
+            canvas.drawCircle(cx, cy, radius * 1.75f, glowPaint)
+
+            // ChatGPT ovozli rejimidagidek silliq, bir butun ko‘k nurli shar.
+            orbPaint.shader = android.graphics.RadialGradient(
+                cx - radius * 0.24f + driftX,
+                cy - radius * 0.30f + driftY,
+                radius * 1.62f,
+                intArrayOf(
+                    0xFFF4FAFF.toInt(),
+                    0xFFD6ECFF.toInt(),
+                    0xFFADD9FF.toInt(),
+                    0xFF82C2FF.toInt(),
+                    0xFF5AA8F5.toInt()
+                ),
+                floatArrayOf(0f, 0.20f, 0.46f, 0.76f, 1f),
+                android.graphics.Shader.TileMode.CLAMP
+            )
+            canvas.drawCircle(cx, cy, radius, orbPaint)
+            orbPaint.shader = null
+            glowPaint.shader = null
+
+            // Ovoz kelganda shar juda yengil kattalashadi.
+            postInvalidateDelayed(32)
         }
     }
 }

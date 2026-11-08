@@ -1,36 +1,74 @@
 name: ARION Kotlin Android APK
+
 on:
   workflow_dispatch:
   push:
     paths:
       - 'kotlin_arion/**'
       - '.github/workflows/kotlin-arion.yml'
+
 permissions:
   contents: read
+
 jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Checkout ARION
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - uses: android-actions/setup-android@v3
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
-      - name: Install Android SDK
+
+      - name: Install Android SDK packages
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
-      - name: Build Kotlin APK
+
+      - name: Restore persistent ARION signing key
+        env:
+          ARION_KEYSTORE_BASE64: ${{ secrets.ARION_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ARION_KEYSTORE_BASE64" || { echo "ARION_KEYSTORE_BASE64 Secret topilmadi"; exit 1; }
+          printf '%s' "$ARION_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/arion-upload.jks"
+          test -s "$RUNNER_TEMP/arion-upload.jks"
+          echo "ARION_KEYSTORE_PATH=$RUNNER_TEMP/arion-upload.jks" >> "$GITHUB_ENV"
+
+      - name: Verify persistent signing key
+        env:
+          ARION_STORE_PASSWORD: ${{ secrets.ARION_STORE_PASSWORD }}
+        run: |
+          test -n "$ARION_STORE_PASSWORD" || { echo "ARION_STORE_PASSWORD Secret topilmadi"; exit 1; }
+          keytool -list -keystore "$ARION_KEYSTORE_PATH" -storepass "$ARION_STORE_PASSWORD" -alias arion-upload
+
+      - name: Build signed release APK
         working-directory: kotlin_arion
-        run: gradle --no-daemon assembleDebug
-      - name: Upload APK
+        env:
+          ARION_STORE_PASSWORD: ${{ secrets.ARION_STORE_PASSWORD }}
+          ARION_KEY_PASSWORD: ${{ secrets.ARION_KEY_PASSWORD }}
+        run: |
+          test -n "$ARION_KEY_PASSWORD" || { echo "ARION_KEY_PASSWORD Secret topilmadi"; exit 1; }
+          gradle --no-daemon :app:assembleRelease
+
+      - name: Verify APK signature
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose kotlin_arion/app/build/outputs/apk/release/app-release.apk
+
+      - name: Upload signed ARION APK
         uses: actions/upload-artifact@v4
         with:
-          name: ARION-KOTLIN-APK
-          path: kotlin_arion/app/build/outputs/apk/debug/app-debug.apk
+          name: ARION-SIGNED-APK
+          path: kotlin_arion/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
