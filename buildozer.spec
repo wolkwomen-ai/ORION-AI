@@ -15,6 +15,8 @@ requirements = python3,kivy,requests
 orientation = portrait
 fullscreen = 0
 
+icon.filename = assets/arion_icon.png
+
 android.permissions = INTERNET,CAMERA
 
 android.api = 35
