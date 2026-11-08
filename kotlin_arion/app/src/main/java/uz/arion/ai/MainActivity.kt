@@ -52,6 +52,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var listening = false
     private var liveMode = false
     private var voicePanel: View? = null
+    private var voiceDock: View? = null
     private var orb: OrbView? = null
     private var lastRms = 0f
     private var waitingForAnswer = false
@@ -121,7 +122,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             text = "AI yordamchi"; textSize = 11f; setTextColor(Color.GRAY); gravity = Gravity.CENTER
         })
         header.addView(titleBox, LinearLayout.LayoutParams(0, -2, 1f))
-        val memoryButton = actionText("◉", Color.WHITE, Color.rgb(16,163,127), 23) { openMemory() }
+        val memoryButton = actionText("＋", Color.WHITE, Color.rgb(35,35,35), 27) { newChat() }
         header.addView(memoryButton, LinearLayout.LayoutParams(dp(48), dp(48)))
         page.addView(header)
 
@@ -178,7 +179,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         micButton = actionText("🎙", Color.TRANSPARENT, Color.rgb(20,20,20), 19) { startDictation() }
         composer.addView(micButton, LinearLayout.LayoutParams(dp(40), dp(40)))
 
-        sendButton = actionText("≋", Color.rgb(37,99,235), Color.WHITE, 23) {
+        sendButton = actionText("◖", Color.rgb(37,99,235), Color.WHITE, 23) {
             if (input.text.toString().trim().isNotEmpty()) sendMessage() else openVoiceMode()
         }
         composer.addView(sendButton, LinearLayout.LayoutParams(dp(42), dp(42)))
@@ -187,7 +188,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val hasText = !s.isNullOrBlank()
-                sendButton.text = if (hasText) "↑" else "≋"
+                sendButton.text = if (hasText) "↑" else "◖"
                 sendButton.contentDescription = if (hasText) "Yuborish" else "Ovozli suhbat"
             }
             override fun afterTextChanged(s: android.text.Editable?) {}
@@ -645,67 +646,103 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private fun showVoicePanel() {
-        val panel = LinearLayout(this).apply {
+        voiceDock?.let { root.removeView(it) }
+        voiceDock = null
+        val scrim = FrameLayout(this).apply { setBackgroundColor(Color.WHITE) }
+        val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(dp(24), dp(24), dp(24), dp(28))
-            background = rounded(Color.rgb(249,249,249), 30).apply {
-                setStroke(dp(1), Color.rgb(230,230,230))
-            }
-            elevation = dp(12).toFloat()
+            setPadding(dp(18), dp(10), dp(18), dp(20))
         }
-        val top = TextView(this).apply {
-            text = "ARION bilan ovozli suhbat"
-            textSize = 19f
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(actionText("×", Color.rgb(245,245,245), Color.DKGRAY, 28) {
+            closeVoiceMode()
+        }, LinearLayout.LayoutParams(dp(44), dp(44)))
+        header.addView(TextView(this).apply {
+            text = "ARION"; textSize = 18f; gravity = Gravity.CENTER
             setTextColor(Color.rgb(35,35,35))
-            gravity = Gravity.CENTER
-        }
-        panel.addView(top, LinearLayout.LayoutParams(-1, dp(44)))
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(actionText("⋯", Color.rgb(245,245,245), Color.DKGRAY, 24) {
+            Toast.makeText(this, "Ovozli suhbat", Toast.LENGTH_SHORT).show()
+        }, LinearLayout.LayoutParams(dp(44), dp(44)))
+        column.addView(header)
+        val center = FrameLayout(this)
         orb = OrbView(this)
-        panel.addView(orb, LinearLayout.LayoutParams(dp(190), dp(190)))
+        center.addView(orb, FrameLayout.LayoutParams(dp(270), dp(270), Gravity.CENTER))
+        column.addView(center, LinearLayout.LayoutParams(-1, 0, 1f))
         val hint = TextView(this).apply {
             text = "Gapiring — ARION tinglayapti"
-            textSize = 14f
-            setTextColor(Color.DKGRAY)
-            gravity = Gravity.CENTER
+            textSize = 15f; setTextColor(Color.DKGRAY); gravity = Gravity.CENTER
         }
-        panel.addView(hint, LinearLayout.LayoutParams(-1, dp(42)))
-        val buttons = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL }
-        val mute = actionText("Ⅱ", Color.rgb(230,230,230), Color.DKGRAY, 22) {
-            voicePaused = true
-            if (listening) recognizer?.cancel()
-            listening = false
-            status.text = "Mikrofon pauzada"
-            hint.text = "Davom ettirish uchun mikrofonni bosing"
+        column.addView(hint, LinearLayout.LayoutParams(-1, dp(42)))
+        val controls = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), dp(6), dp(4), dp(6))
         }
-        val end = actionText("×", Color.rgb(210,55,55), Color.WHITE, 28) { closeVoiceMode() }
-        val resume = actionText("🎙", Color.rgb(16,163,127), Color.WHITE, 20) { resumeLiveListening() }
-        buttons.addView(mute, LinearLayout.LayoutParams(dp(54), dp(54)).apply { rightMargin = dp(18) })
-        buttons.addView(end, LinearLayout.LayoutParams(dp(54), dp(54)).apply { rightMargin = dp(18) })
-        buttons.addView(resume, LinearLayout.LayoutParams(dp(54), dp(54)))
-        panel.addView(buttons)
-        panel.setOnTouchListener(object : View.OnTouchListener {
-            var downY = 0f
-            override fun onTouch(v: View, event: MotionEvent): Boolean {
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> { downY = event.rawY; return true }
-                    MotionEvent.ACTION_UP -> {
-                        val delta = event.rawY - downY
-                        if (abs(delta) > dp(70)) closeVoiceMode()
-                        return true
-                    }
-                }
-                return true
+        controls.addView(actionText("🎙", Color.rgb(242,242,242), Color.DKGRAY, 21) {
+            if (voicePaused) {
+                voicePaused = false
+                resumeLiveListening()
+                hint.text = "Gapiring — ARION tinglayapti"
+            } else {
+                voicePaused = true
+                if (listening) recognizer?.cancel()
+                listening = false
+                hint.text = "Mikrofon pauzada"
+                status.text = "Mikrofon pauzada"
             }
-        })
-        val scrim = FrameLayout(this).apply { setBackgroundColor(0x66000000) }
-        scrim.addView(panel, FrameLayout.LayoutParams(-1, dp(430), Gravity.BOTTOM).apply {
-            leftMargin = dp(10); rightMargin = dp(10); bottomMargin = dp(12)
-        })
-        scrim.setOnClickListener { closeVoiceMode() }
-        panel.setOnClickListener { }
+        }, LinearLayout.LayoutParams(dp(54), dp(54)).apply { rightMargin = dp(18) })
+        controls.addView(actionText("↓", Color.rgb(242,242,242), Color.DKGRAY, 24) {
+            dockVoicePanel()
+        }, LinearLayout.LayoutParams(dp(54), dp(54)).apply { rightMargin = dp(18) })
+        controls.addView(actionText("×", Color.rgb(220,55,55), Color.WHITE, 27) {
+            closeVoiceMode()
+        }, LinearLayout.LayoutParams(dp(54), dp(54)))
+        column.addView(controls)
+        scrim.addView(column, FrameLayout.LayoutParams(-1, -1))
         voicePanel = scrim
         root.addView(scrim, FrameLayout.LayoutParams(-1, -1))
+    }
+
+    private fun dockVoicePanel() {
+        if (!liveMode) return
+        voicePanel?.let { root.removeView(it) }
+        voicePanel = null
+        val dock = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = rounded(Color.rgb(248,248,250), 28).apply {
+                setStroke(dp(1), Color.rgb(225,225,230))
+            }
+            elevation = dp(6).toFloat()
+        }
+        val miniOrb = OrbView(this)
+        dock.addView(miniOrb, LinearLayout.LayoutParams(dp(54), dp(54)))
+        dock.addView(TextView(this).apply {
+            text = "ARION ovozli suhbat"; textSize = 14f
+            setTextColor(Color.DKGRAY); setPadding(dp(10), 0, 0, 0)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        dock.addView(actionText("🎙", Color.rgb(235,235,238), Color.DKGRAY, 19) {
+            if (voicePaused) { voicePaused = false; resumeLiveListening() }
+            else { voicePaused = true; if (listening) recognizer?.cancel(); listening = false }
+        }, LinearLayout.LayoutParams(dp(44), dp(44)))
+        dock.addView(actionText("×", Color.rgb(220,55,55), Color.WHITE, 24) {
+            closeVoiceMode()
+        }, LinearLayout.LayoutParams(dp(44), dp(44)).apply { leftMargin = dp(8) })
+        dock.setOnClickListener {
+            root.removeView(dock)
+            voiceDock = null
+            showVoicePanel()
+        }
+        voiceDock = dock
+        root.addView(dock, FrameLayout.LayoutParams(-1, dp(72), Gravity.BOTTOM).apply {
+            leftMargin = dp(12); rightMargin = dp(12); bottomMargin = dp(12)
+        })
     }
 
     private fun resumeLiveListening() {
@@ -792,6 +829,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         tts?.stop()
         voicePanel?.let { root.removeView(it) }
         voicePanel = null
+        voiceDock?.let { root.removeView(it) }
+        voiceDock = null
         orb = null
         status.text = ""
     }
