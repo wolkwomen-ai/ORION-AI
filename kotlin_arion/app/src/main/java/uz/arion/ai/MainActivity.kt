@@ -908,8 +908,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             val h = height.toFloat()
             val scale = (minOf(w, h) / dp(190).toFloat()).coerceAtLeast(0.25f)
             val cx = w / 2f
-            val cy = h / 2f + (kotlin.math.sin(t * 1.35) * dp(5) * scale).toFloat()
-            val pulse = 1f + (kotlin.math.sin(t * 2.1) * 0.045f)
+            val cy = h / 2f + (kotlin.math.sin(t * 1.35).toFloat() * dp(5) * scale)
+            val pulse = 1f + (kotlin.math.sin(t * 2.1).toFloat() * 0.045f)
             val rms = lastRms.coerceIn(0f, 12f) / 12f
             val cloudW = dp(76).toFloat() * scale * pulse * (1f + rms * .12f)
             val cloudH = dp(34).toFloat() * scale * pulse
@@ -926,8 +926,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 cx + cloudW, cy + cloudH * .62f,
                 cloudH * .42f, cloudH * .42f, cloud
             )
-            val drift1 = (kotlin.math.sin(t * 1.1) * dp(3) * scale).toFloat()
-            val drift2 = (kotlin.math.cos(t * 1.35) * dp(3) * scale).toFloat()
+            val drift1 = (kotlin.math.sin(t * 1.1).toFloat() * dp(3) * scale)
+            val drift2 = (kotlin.math.cos(t * 1.35).toFloat() * dp(3) * scale)
             cloud.color = lightBlue
             canvas.drawCircle(cx - cloudW * .48f + drift1, cy - cloudH * .18f, cloudH * .62f, cloud)
             canvas.drawCircle(cx + drift2, cy - cloudH * .60f, cloudH * .78f, cloud)
