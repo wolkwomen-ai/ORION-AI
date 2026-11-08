@@ -15,6 +15,9 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.media.MediaPlayer
+import io.github.whitemagic2014.tts.TTS as EdgeTTS
+import io.github.whitemagic2014.tts.TTSVoice
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -44,6 +47,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var recognizer: SpeechRecognizer? = null
     private var tts: TextToSpeech? = null
     private var ttsReady = false
+    private var edgePlayer: MediaPlayer? = null
     private var listening = false
     private var liveMode = false
     private var voicePanel: View? = null
@@ -638,12 +642,72 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         catch (_: Exception) { status.text = "Mikrofonni qayta yoqish uchun 🎙 bosing" }
     }
 
+    // Edge TTS: aynan uz-UZ-MadinaNeural ovozida MP3 tayyorlaydi.
     private fun speak(text: String) {
-        if (!liveMode || !ttsReady) { if (liveMode) resumeLiveListening(); return }
-        tts?.speak(text.take(3500), TextToSpeech.QUEUE_FLUSH, null, "arion-answer")
-        root.postDelayed({
-            if (liveMode && !waitingForAnswer) resumeLiveListening()
-        }, (text.length.coerceAtMost(3500) * 65L).coerceIn(1800L, 18000L))
+        if (!liveMode) return
+        status.text = "Madina ovozi tayyorlanmoqda…"
+        thread {
+            try {
+                val voice = TTSVoice.provides()
+                    .firstOrNull { it.shortName == "uz-UZ-MadinaNeural" }
+                    ?: throw IllegalStateException("uz-UZ-MadinaNeural ovozi ro‘yxatda topilmadi")
+
+                val audio = EdgeTTS(voice, text.take(3500))
+                    .voiceRate("-5%")
+                    .formatMp3()
+                    .transToAudioStream()
+                    ?: throw IllegalStateException("Edge TTS bo‘sh audio qaytardi")
+
+                val audioFile = java.io.File(cacheDir, "arion_madina.mp3")
+                audioFile.writeBytes(audio.toByteArray())
+
+                runOnUiThread {
+                    if (!liveMode || isFinishing) return@runOnUiThread
+                    try {
+                        edgePlayer?.setOnCompletionListener(null)
+                        edgePlayer?.release()
+                        edgePlayer = MediaPlayer().apply {
+                            setDataSource(audioFile.absolutePath)
+                            setOnPreparedListener { player ->
+                                status.text = "Madina gapiryapti…"
+                                player.start()
+                            }
+                            setOnCompletionListener { player ->
+                                player.release()
+                                if (edgePlayer === player) edgePlayer = null
+                                status.text = ""
+                                if (liveMode && !waitingForAnswer) resumeLiveListening()
+                            }
+                            setOnErrorListener { player, _, _ ->
+                                player.release()
+                                if (edgePlayer === player) edgePlayer = null
+                                status.text = "Ovozni ijro etib bo‘lmadi"
+                                if (liveMode) resumeLiveListening()
+                                true
+                            }
+                            prepareAsync()
+                        }
+                    } catch (e: Exception) {
+                        status.text = "MP3 ijro xatosi: ${e.localizedMessage}"
+                        resumeLiveListening()
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    status.text = "Edge TTS xatosi: ${e.localizedMessage}"
+                    // Edge xizmati vaqtincha ishlamasa, suhbat uzilib qolmasin.
+                    if (ttsReady) {
+                        tts?.speak(text.take(3500), TextToSpeech.QUEUE_FLUSH, null, "arion-fallback")
+                        root.postDelayed({
+                            status.text = ""
+                            if (liveMode && !waitingForAnswer) resumeLiveListening()
+                        }, (text.length.coerceAtMost(3500) * 65L).coerceIn(1800L, 18000L))
+                    } else if (liveMode) {
+                        resumeLiveListening()
+                    }
+                }
+            }
+        }
     }
 
     private fun closeVoiceMode() {
@@ -691,6 +755,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         try { recognizer?.destroy() } catch (_: Exception) {}
         tts?.stop()
         tts?.shutdown()
+        try { edgePlayer?.stop() } catch (_: Exception) {}
+        edgePlayer?.release()
+        edgePlayer = null
         super.onDestroy()
     }
 
