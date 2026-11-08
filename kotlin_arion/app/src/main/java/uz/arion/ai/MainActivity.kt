@@ -510,13 +510,13 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             super.onDraw(canvas)
             val cx = width / 2f
             val cy = height / 2f
-            val radius = dp(48) + (lastRms.coerceIn(0f, 12f) * dp(1.2f)).toInt()
-            canvas.drawCircle(cx, cy, radius + dp(18), glow)
-            canvas.drawCircle(cx, cy, radius.toFloat(), fill)
+            val radius = dp(48).toFloat() + lastRms.coerceIn(0f, 12f) * dp(1).toFloat()
+            canvas.drawCircle(cx, cy, radius + dp(18).toFloat(), glow)
+            canvas.drawCircle(cx, cy, radius, fill)
             val path = Path()
             for (i in 0..4) {
                 val x = cx + (i - 2) * dp(13)
-                val h = dp(10) + (lastRms.coerceIn(0f, 12f) * dp(1.5f)) * (if (i % 2 == 0) 1f else .65f)
+                val h = dp(10).toFloat() + (lastRms.coerceIn(0f, 12f) * dp(2).toFloat()) * (if (i % 2 == 0) 1f else .65f)
                 if (i == 0) path.moveTo(x, cy - h) else path.lineTo(x, cy - h)
                 path.lineTo(x, cy + h)
             }
