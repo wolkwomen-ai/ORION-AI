@@ -17,7 +17,7 @@ android {
 
     signingConfigs {
         release {
-            storeFile file(System.getenv('ARION_STORE_FILE') ?: 'app/arion-upload.keystore')
+            storeFile file(System.getenv('ARION_STORE_FILE') ?: 'arion-upload.keystore')
             storePassword System.getenv('ARION_STORE_PASSWORD')
             keyAlias System.getenv('ARION_KEY_ALIAS')
             keyPassword System.getenv('ARION_KEY_PASSWORD')
