@@ -466,15 +466,18 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             .putString("groq_key", Base64.encodeToString(encrypted, Base64.NO_WRAP)).apply()
     }
 
-    private fun readApiKey(): String? = try {
-        val prefs = getSharedPreferences("arion_secure", Context.MODE_PRIVATE)
-        val ivText = prefs.getString("groq_iv", null) ?: return null
-        val keyText = prefs.getString("groq_key", null) ?: return null
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, keystoreKey(),
-            GCMParameterSpec(128, Base64.decode(ivText, Base64.NO_WRAP)))
-        String(cipher.doFinal(Base64.decode(keyText, Base64.NO_WRAP)), Charsets.UTF_8).takeIf { it.isNotBlank() }
-    } catch (_: Exception) { null }
+    private fun readApiKey(): String? {
+        return try {
+            val prefs = getSharedPreferences("arion_secure", Context.MODE_PRIVATE)
+            val ivText = prefs.getString("groq_iv", null)
+            val keyText = prefs.getString("groq_key", null)
+            if (ivText.isNullOrBlank() || keyText.isNullOrBlank()) return null
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, keystoreKey(),
+                GCMParameterSpec(128, Base64.decode(ivText, Base64.NO_WRAP)))
+            String(cipher.doFinal(Base64.decode(keyText, Base64.NO_WRAP)), Charsets.UTF_8).takeIf { it.isNotBlank() }
+        } catch (_: Exception) { null }
+    }
 
     private fun showApiKeyDialog(onSaved: (() -> Unit)? = null) {
         val field = EditText(this).apply {
