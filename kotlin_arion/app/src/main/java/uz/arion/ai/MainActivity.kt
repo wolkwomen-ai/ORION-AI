@@ -131,7 +131,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         composer.addView(plus, LinearLayout.LayoutParams(dp(40), dp(40)))
 
         input = EditText(this).apply {
-            hint = "Xabar yuboring"
+            hint = "Xabar yozing"
             textSize = 16f
             minLines = 1
             maxLines = 5
@@ -149,20 +149,23 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
         composer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
 
-        micButton = actionText("🎙", Color.rgb(235,235,235), Color.rgb(35,35,35), 18) { startDictation() }
+        micButton = actionText("🎙", Color.TRANSPARENT, Color.rgb(20,20,20), 19) { startDictation() }
         composer.addView(micButton, LinearLayout.LayoutParams(dp(40), dp(40)))
 
-        val rightStack = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
+        sendButton = actionText("≋", Color.rgb(37,99,235), Color.WHITE, 23) {
+            if (input.text.toString().trim().isNotEmpty()) sendMessage() else openVoiceMode()
         }
-        voiceButton = actionText("≋", Color.rgb(235,235,235), Color.rgb(35,35,35), 18) { openVoiceMode() }
-        rightStack.addView(voiceButton, LinearLayout.LayoutParams(dp(34), dp(28)))
-        sendButton = actionText("↑", Color.rgb(37,99,235), Color.WHITE, 24) { sendMessage() }
-        val sendLp = LinearLayout.LayoutParams(dp(40), dp(40))
-        sendLp.topMargin = dp(2)
-        rightStack.addView(sendButton, sendLp)
-        composer.addView(rightStack, LinearLayout.LayoutParams(dp(42), -2))
+        composer.addView(sendButton, LinearLayout.LayoutParams(dp(42), dp(42)))
+
+        input.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val hasText = !s.isNullOrBlank()
+                sendButton.text = if (hasText) "↑" else "≋"
+                sendButton.contentDescription = if (hasText) "Yuborish" else "Ovozli suhbat"
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
         val composerLp = LinearLayout.LayoutParams(-1, -2)
         composerLp.topMargin = dp(8)
         page.addView(composer, composerLp)
@@ -290,8 +293,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     listening = false
                     if (!liveMode) {
                         micButton.text = "🎙"
-                        micButton.translationX = 0f
-                        input.hint = "Xabar yuboring"
+                        input.hint = "Xabar yozing"
                     }
                     if (liveMode && !waitingForAnswer) {
                         if (error != SpeechRecognizer.ERROR_NO_MATCH && error != SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
@@ -306,8 +308,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     listening = false
                     if (!liveMode) {
                         micButton.text = "🎙"
-                        micButton.translationX = 0f
-                        input.hint = "Xabar yuboring"
+                        input.hint = "Xabar yozing"
                     }
                     val phrase = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
                     if (phrase.isNotBlank()) {
@@ -346,14 +347,12 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         if (!ensureRecognizer()) return
         liveMode = false
         micButton.text = "■"
-        micButton.animate().translationX(-dp(42).toFloat()).setDuration(180).start()
-        input.hint = "≋  Ovoz yozilmoqda…"
+        input.hint = "Ovoz yozilmoqda… gapiring"
         status.text = "Ovoz yozilmoqda…"
         try { recognizer?.startListening(speechIntent()) }
         catch (_: Exception) {
             micButton.text = "🎙"
-            micButton.translationX = 0f
-            input.hint = "Xabar yuboring"
+            input.hint = "Xabar yozing"
             status.text = "Mikrofonni ishga tushirib bo‘lmadi"
         }
     }
