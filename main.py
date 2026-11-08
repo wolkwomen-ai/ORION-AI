@@ -34,6 +34,8 @@ from kivy.uix.popup import Popup
 from kivy.uix.filechooser import FileChooserIconView
 from kivy.graphics import Color, Ellipse, RoundedRectangle
 from kivy.core.clipboard import Clipboard
+from kivy.graphics.texture import Texture
+import math
 
 
 # ============================================================
@@ -918,11 +920,16 @@ class OrionApp(App):
         self.chat.bind(minimum_height=self.chat.setter("height"))
         holder = AnchorLayout(size_hint_y=None, height=dp(235))
         orb = Widget(size_hint=(None,None), size=(dp(190),dp(190)))
+        # ARION shari: tepada tiniq moviy, o'rtada oq bulutlar,
+        # pastda och osmonrang. Tekis chetli dumaloq tekstura.
+        orb_texture = self.make_orb_texture(256)
         with orb.canvas:
-            Color(0.30,0.69,1.0,1); orb_shape = Ellipse(pos=orb.pos, size=orb.size)
-            Color(0.78,0.92,1.0,0.40); orb_shine = Ellipse(pos=(orb.x+dp(38),orb.y+dp(130)), size=(dp(75),dp(32)))
-        orb.bind(pos=lambda obj,v: (setattr(orb_shape,"pos",v), setattr(orb_shine,"pos",(v[0]+dp(38),v[1]+dp(130)))),
-                 size=lambda obj,v: setattr(orb_shape,"size",v))
+            Color(1, 1, 1, 1)
+            orb_shape = Ellipse(pos=orb.pos, size=orb.size, texture=orb_texture)
+        orb.bind(
+            pos=lambda obj, value: setattr(orb_shape, "pos", value),
+            size=lambda obj, value: setattr(orb_shape, "size", value)
+        )
         holder.add_widget(orb); self.chat.add_widget(holder)
         self.chat.add_widget(Label(text="Salom! Men ARION. Sizga qanday yordam beray?", size_hint_y=None, height=dp(45), font_size="16sp", color=(0.18,0.22,0.28,1)))
         self.scroll.add_widget(self.chat); root.add_widget(self.scroll)
@@ -943,6 +950,51 @@ class OrionApp(App):
         shell.add_widget(composer); root.add_widget(shell)
         start_server()
         return root
+
+    def make_orb_texture(self, size=256):
+        """Bulutli moviy shar teksturasini Kivy ichida yaratadi."""
+        pixels = bytearray()
+        for py in range(size):
+            y = py / float(size - 1)  # 0 past, 1 yuqori
+            for px in range(size):
+                x = px / float(size - 1)
+                dx = (x - 0.5) * 2.0
+                dy = (y - 0.5) * 2.0
+                distance = math.sqrt(dx * dx + dy * dy)
+
+                # Doira chetini silliq va ramkasiz qilish.
+                edge = max(0.0, min(1.0, (1.0 - distance) * size / 2.2))
+                alpha = int(255 * edge * edge * (3.0 - 2.0 * edge))
+
+                # Pastdan yuqoriga och moviydan tiniq ko'k rangga o'tish.
+                if y < 0.48:
+                    t = y / 0.48
+                    base = (0.72 + 0.04*t, 0.80 + 0.08*t, 0.98 + 0.02*t)
+                else:
+                    t = (y - 0.48) / 0.52
+                    base = (0.76 - 0.53*t, 0.88 - 0.43*t, 1.00 - 0.10*t)
+
+                # O'rtadagi yumshoq, tabiiy bulut qatlamlari.
+                wave = (
+                    math.sin(x * 19.0 + y * 8.0)
+                    + 0.55 * math.sin(x * 37.0 - y * 17.0)
+                    + 0.30 * math.sin(x * 71.0 + y * 29.0)
+                ) / 1.85
+                cloud_band = math.exp(-((y - (0.53 + 0.035*math.sin(x*10.0))) / 0.105) ** 2)
+                cloud = max(0.0, min(0.82, (0.28 + 0.72*wave) * cloud_band))
+                # Bulutlar markazda yorqin, chetlarda esa tabiiy xira.
+                cloud *= max(0.0, 1.0 - abs(dx) * 0.38)
+
+                r = min(1.0, base[0] + (1.0-base[0]) * cloud)
+                g = min(1.0, base[1] + (1.0-base[1]) * cloud)
+                b = min(1.0, base[2] + (1.0-base[2]) * cloud)
+                pixels.extend((int(r*255), int(g*255), int(b*255), alpha))
+
+        texture = Texture.create(size=(size, size), colorfmt="rgba")
+        texture.blit_buffer(bytes(pixels), colorfmt="rgba", bufferfmt="ubyte")
+        texture.mag_filter = "linear"
+        texture.min_filter = "linear"
+        return texture
 
     def show_settings(self, *_):
         box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
