@@ -81,6 +81,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         tts = TextToSpeech(this, this)
         buildScreen()
         addMessage("ARION", "Assalomu alaykum! Men ARIONman. Sizga qanday yordam beray?")
+        if (getSharedPreferences("arion_config", Context.MODE_PRIVATE).getString("groq_api_key", "").isNullOrBlank()) {
+            root.postDelayed({ showApiKeyDialog() }, 500)
+        }
     }
 
     private fun buildScreen() {
@@ -104,6 +107,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             popup.menu.add("Internet qidiruvi").setOnMenuItemClickListener { openInternetSearch(); true }
             popup.menu.add("Telefon sozlamalari").setOnMenuItemClickListener { openPhoneSettings(); true }
             popup.menu.add("Ovozli suhbat").setOnMenuItemClickListener { openVoiceMode(); true }
+            popup.menu.add("API kalitni ulash").setOnMenuItemClickListener { showApiKeyDialog(); true }
             popup.show()
         }
         header.addView(menu, LinearLayout.LayoutParams(dp(48), dp(48)))
@@ -432,34 +436,104 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             .hideSoftInputFromWindow(input.windowToken, 0)
     }
 
+    private fun showApiKeyDialog() {
+        val editor = EditText(this).apply {
+            hint = "Groq API kalitini shu yerga joylang"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+            textSize = 15f
+        }
+        val current = getSharedPreferences("arion_config", Context.MODE_PRIVATE)
+            .getString("groq_api_key", "").orEmpty()
+        if (current.isNotBlank()) editor.setText(current)
+        val note = TextView(this).apply {
+            text = "Pydroid 3 endi kerak emas. ARION Groq serveriga to‘g‘ridan-to‘g‘ri ulanadi. Pydroid ichidagi orion_key.txt faylida turgan kalitni nusxalab shu yerga joylang. Kalit faqat shu telefonda saqlanadi."
+            textSize = 13f
+            setTextColor(Color.DKGRAY)
+            setPadding(0, 0, 0, dp(10))
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(4))
+            addView(note)
+            addView(editor)
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("ARION — API KALIT")
+            .setView(box)
+            .setPositiveButton("SAQLASH") { _, _ ->
+                val key = editor.text.toString().trim()
+                if (key.isBlank()) {
+                    Toast.makeText(this, "API kalit kiritilmadi", Toast.LENGTH_LONG).show()
+                } else {
+                    getSharedPreferences("arion_config", Context.MODE_PRIVATE)
+                        .edit().putString("groq_api_key", key).apply()
+                    Toast.makeText(this, "API kalit telefonda saqlandi", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton("BEKOR", null)
+            .show()
+    }
+
     private fun askBackend(question: String, speakAnswer: Boolean) {
         waitingForAnswer = true
         status.text = "ARION javob tayyorlamoqda…"
         thread {
             var answer: String
             try {
-                val conn = (URL("http://127.0.0.1:8765/ask").openConnection() as HttpURLConnection)
+                val prefs = getSharedPreferences("arion_config", Context.MODE_PRIVATE)
+                val apiKey = prefs.getString("groq_api_key", "").orEmpty().trim()
+                if (apiKey.isBlank()) throw IllegalStateException("API kalit ulanmagan. ☰ menyudan «API kalitni ulash» bo‘limini oching.")
+                val historyPrefs = getSharedPreferences("arion_chat", Context.MODE_PRIVATE)
+                val saved = try { JSONArray(historyPrefs.getString("messages", "[]")) } catch (_: Exception) { JSONArray() }
+                val messages = org.json.JSONArray()
+                messages.put(JSONObject()
+                    .put("role", "system")
+                    .put("content", "Sen ARION nomli ilg‘or shaxsiy sun’iy intellekt yordamchisisan. Foydalanuvchiga o‘zbek tilida ravon, aniq va foydali javob ber. Bilmagan narsangni to‘qima. Kod so‘ralsa to‘liq va ishlatishga tayyor kod ber. API kalitlarni oshkor qilma."))
+                val from = maxOf(0, saved.length() - 30)
+                for (i in from until saved.length()) messages.put(saved.getJSONObject(i))
+                messages.put(JSONObject().put("role", "user").put("content", question))
+                val payload = JSONObject()
+                    .put("model", "qwen/qwen3.8-27b")
+                    .put("messages", messages)
+                    .put("temperature", 0.6)
+                    .put("max_completion_tokens", 2500)
+                val conn = (URL("https://api.groq.com/openai/v1/chat/completions").openConnection() as HttpURLConnection)
                 conn.requestMethod = "POST"
-                conn.connectTimeout = 5000
+                conn.connectTimeout = 15000
                 conn.readTimeout = 95000
                 conn.doOutput = true
+                conn.setRequestProperty("Authorization", "Bearer $apiKey")
                 conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                val body = JSONObject().put("question", question).toString().toByteArray(Charsets.UTF_8)
-                conn.outputStream.use { it.write(body) }
+                conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
                 val code = conn.responseCode
                 val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-                val response = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val response = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
                 val json = JSONObject(response)
-                if (code in 200..299) answer = json.optString("answer", "ARION bo‘sh javob oldi.")
-                else answer = json.optString("error", "Server xatosi: $code")
+                if (code !in 200..299) {
+                    val detail = json.optJSONObject("error")?.optString("message")
+                        ?: "HTTP $code"
+                    throw IllegalStateException("Groq xatosi ($code): $detail")
+                }
+                answer = json.optJSONArray("choices")?.optJSONObject(0)
+                    ?.optJSONObject("message")?.optString("content")
+                    ?.takeIf { it.isNotBlank() } ?: "ARION bo‘sh javob oldi."
+                val updated = JSONArray()
+                val keepFrom = maxOf(0, saved.length() - 28)
+                for (i in keepFrom until saved.length()) updated.put(saved.getJSONObject(i))
+                updated.put(JSONObject().put("role", "user").put("content", question))
+                updated.put(JSONObject().put("role", "assistant").put("content", answer))
+                historyPrefs.edit().putString("messages", updated.toString()).apply()
                 conn.disconnect()
             } catch (e: Exception) {
-                answer = "ARION serveriga ulanib bo‘lmadi. Pydroid 3 ichida ARION serverini ishga tushiring (127.0.0.1:8765)."
+                answer = e.message ?: "Internet yoki AI server bilan aloqa xatosi."
             }
             runOnUiThread {
                 waitingForAnswer = false
                 status.text = ""
                 addMessage("ARION", answer)
+                if (answer.contains("API kalit ulanmagan")) showApiKeyDialog()
                 if (speakAnswer && liveMode) {
                     speak(answer)
                 } else if (liveMode) {
