@@ -286,6 +286,11 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 override fun onEndOfSpeech() { listening = false; status.text = "Ovoz qayta ishlanmoqda…" }
                 override fun onError(error: Int) {
                     listening = false
+                    if (!liveMode) {
+                        micButton.text = "🎙"
+                        micButton.translationX = 0f
+                        input.hint = "Xabar yuboring"
+                    }
                     if (liveMode && !waitingForAnswer) {
                         if (error != SpeechRecognizer.ERROR_NO_MATCH && error != SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
                             status.text = "Ovozni aniqlash xatosi"
@@ -297,6 +302,11 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 }
                 override fun onResults(results: Bundle?) {
                     listening = false
+                    if (!liveMode) {
+                        micButton.text = "🎙"
+                        micButton.translationX = 0f
+                        input.hint = "Xabar yuboring"
+                    }
                     val phrase = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
                     if (phrase.isNotBlank()) {
                         if (liveMode) {
@@ -333,9 +343,17 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
         if (!ensureRecognizer()) return
         liveMode = false
-        status.text = "Tayyorlanmoqda…"
+        micButton.text = "■"
+        micButton.animate().translationX(-dp(42).toFloat()).setDuration(180).start()
+        input.hint = "≋  Ovoz yozilmoqda…"
+        status.text = "Ovoz yozilmoqda…"
         try { recognizer?.startListening(speechIntent()) }
-        catch (_: Exception) { status.text = "Mikrofonni ishga tushirib bo‘lmadi" }
+        catch (_: Exception) {
+            micButton.text = "🎙"
+            micButton.translationX = 0f
+            input.hint = "Xabar yuboring"
+            status.text = "Mikrofonni ishga tushirib bo‘lmadi"
+        }
     }
 
     private fun openVoiceMode() {
