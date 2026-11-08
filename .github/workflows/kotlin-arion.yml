@@ -64,7 +64,7 @@ jobs:
 
       - name: Verify APK signature
         run: |
-          apksigner verify --verbose kotlin_arion/app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose kotlin_arion/app/build/outputs/apk/release/app-release.apk
 
       - name: Upload signed ARION APK
         uses: actions/upload-artifact@v4
