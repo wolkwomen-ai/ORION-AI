@@ -905,13 +905,13 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 cy - radius * 0.30f + driftY,
                 radius * 1.62f,
                 intArrayOf(
-                    0xFFEAF4FF.toInt(),
-                    0xFF78B5FF.toInt(),
-                    0xFF318BFF.toInt(),
-                    0xFF1762E8.toInt(),
-                    0xFF103AA8.toInt()
+                    0xFFF4FAFF.toInt(),
+                    0xFFD6ECFF.toInt(),
+                    0xFFADD9FF.toInt(),
+                    0xFF82C2FF.toInt(),
+                    0xFF5AA8F5.toInt()
                 ),
-                floatArrayOf(0f, 0.16f, 0.43f, 0.76f, 1f),
+                floatArrayOf(0f, 0.20f, 0.46f, 0.76f, 1f),
                 android.graphics.Shader.TileMode.CLAMP
             )
             canvas.drawCircle(cx, cy, radius, orbPaint)
