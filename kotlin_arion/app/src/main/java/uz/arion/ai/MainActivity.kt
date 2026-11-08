@@ -25,6 +25,8 @@ import androidx.core.view.WindowInsetsCompat
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
+import android.media.MediaPlayer
+import java.io.File
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -52,6 +54,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var recognizer: SpeechRecognizer? = null
     private var tts: TextToSpeech? = null
     private var ttsReady = false
+    private var madinaPlayer: MediaPlayer? = null
     private var listening = false
     private var liveMode = false
     private var voicePanel: View? = null
@@ -104,6 +107,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             val popup = PopupMenu(this@MainActivity, it)
             popup.menu.add("Yangi suhbat").setOnMenuItemClickListener { newChat(); true }
             popup.menu.add("Groq API kalitini sozlash").setOnMenuItemClickListener { showApiKeyDialog(); true }
+            popup.menu.add("Madina o‘zbekcha ovozini sozlash").setOnMenuItemClickListener { showMadinaSettings() ; true }
             popup.menu.add("Rasm tanlash").setOnMenuItemClickListener { chooseImage(); true }
             popup.menu.add("Xotira").setOnMenuItemClickListener { openMemory(); true }
             popup.menu.add("Agent rejimi").setOnMenuItemClickListener { toggleAgentMode(); true }
@@ -754,12 +758,148 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         catch (_: Exception) { status.text = "Mikrofonni qayta yoqish uchun 🎙 bosing" }
     }
 
+    // Microsoft Azure Speech: haqiqiy o‘zbekcha Madina Neural ovozi.
+    private fun saveMadinaKey(value: String) {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, keystoreKey())
+        val encrypted = cipher.doFinal(value.trim().toByteArray(Charsets.UTF_8))
+        getSharedPreferences("arion_secure", Context.MODE_PRIVATE).edit()
+            .putString("madina_iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+            .putString("madina_key", Base64.encodeToString(encrypted, Base64.NO_WRAP)).apply()
+    }
+
+    private fun readMadinaKey(): String? {
+        return try {
+            val p = getSharedPreferences("arion_secure", Context.MODE_PRIVATE)
+            val iv = p.getString("madina_iv", null) ?: return null
+            val encrypted = p.getString("madina_key", null) ?: return null
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, keystoreKey(), GCMParameterSpec(128, Base64.decode(iv, Base64.NO_WRAP)))
+            String(cipher.doFinal(Base64.decode(encrypted, Base64.NO_WRAP)), Charsets.UTF_8)
+        } catch (_: Exception) { null }
+    }
+
+    private fun showMadinaSettings(onSaved: (() -> Unit)? = null) {
+        val prefs = getSharedPreferences("arion_secure", Context.MODE_PRIVATE)
+        val keyField = EditText(this).apply {
+            hint = "Azure Speech Key"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+        }
+        val regionField = EditText(this).apply {
+            hint = "Masalan: eastus"
+            setSingleLine(true)
+            setText(prefs.getString("madina_region", "eastus"))
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(4))
+            addView(TextView(this@MainActivity).apply {
+                text = "Microsoft Azure Speech kaliti va resurs regionini kiriting. Kalit telefonda shifrlanib saqlanadi. Ovoz: uz-UZ-MadinaNeural."
+                textSize = 13f
+                setTextColor(Color.DKGRAY)
+            })
+            addView(keyField)
+            addView(regionField)
+        }
+        val dialog = android.app.AlertDialog.Builder(this).setTitle("Madina — o‘zbekcha ovoz")
+            .setView(box).setPositiveButton("SAQLASH", null).setNegativeButton("BEKOR", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val key = keyField.text.toString().trim()
+                val region = regionField.text.toString().trim().lowercase(Locale.ROOT)
+                if (key.length < 20) { keyField.error = "Azure Speech kalitini kiriting"; return@setOnClickListener }
+                if (!region.matches(Regex("[a-z0-9]+[a-z0-9-]*"))) {
+                    regionField.error = "Region nomini to‘g‘ri kiriting"; return@setOnClickListener
+                }
+                try {
+                    saveMadinaKey(key)
+                    prefs.edit().putString("madina_region", region).apply()
+                    dialog.dismiss()
+                    Toast.makeText(this, "Madina ovozi sozlandi", Toast.LENGTH_SHORT).show()
+                    onSaved?.invoke()
+                } catch (e: Exception) {
+                    keyField.error = "Saqlash xatosi: ${e.localizedMessage}"
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun xmlEscape(value: String): String = value
+        .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        .replace("\"", "&quot;").replace("'", "&apos;")
+
     private fun speak(text: String) {
-        if (!liveMode || !ttsReady) { if (liveMode) resumeLiveListening(); return }
-        tts?.speak(text.take(3500), TextToSpeech.QUEUE_FLUSH, null, "arion-answer")
-        root.postDelayed({
-            if (liveMode && !waitingForAnswer) resumeLiveListening()
-        }, (text.length.coerceAtMost(3500) * 65L).coerceIn(1800L, 18000L))
+        if (!liveMode) return
+        val key = readMadinaKey()
+        if (key.isNullOrBlank()) {
+            showMadinaSettings { speak(text) }
+            return
+        }
+        val region = getSharedPreferences("arion_secure", Context.MODE_PRIVATE)
+            .getString("madina_region", "eastus") ?: "eastus"
+        status.text = "Madina javobni ovozga aylantirmoqda…"
+        thread {
+            try {
+                val ssml = "<speak version='1.0' xml:lang='uz-UZ'><voice xml:lang='uz-UZ' name='uz-UZ-MadinaNeural'>${xmlEscape(text.take(3500))}</voice></speak>"
+                val conn = URL("https://$region.tts.speech.microsoft.com/cognitiveservices/v1").openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.connectTimeout = 20000
+                conn.readTimeout = 90000
+                conn.doOutput = true
+                conn.setRequestProperty("Ocp-Apim-Subscription-Key", key)
+                conn.setRequestProperty("Content-Type", "application/ssml+xml; charset=utf-8")
+                conn.setRequestProperty("X-Microsoft-OutputFormat", "audio-24khz-96kbitrate-mono-mp3")
+                conn.setRequestProperty("User-Agent", "ARION-Android")
+                conn.outputStream.use { it.write(ssml.toByteArray(Charsets.UTF_8)) }
+                val code = conn.responseCode
+                if (code !in 200..299) {
+                    val detail = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                    throw IllegalStateException("Azure Speech xatosi ($code): ${detail.take(250)}")
+                }
+                val audio = File(cacheDir, "arion_madina.mp3")
+                conn.inputStream.use { input -> audio.outputStream().use { output -> input.copyTo(output) } }
+                conn.disconnect()
+                runOnUiThread {
+                    try {
+                        madinaPlayer?.release()
+                        madinaPlayer = MediaPlayer().apply {
+                            setDataSource(audio.absolutePath)
+                            setOnPreparedListener { player ->
+                                status.text = "Madina gapiryapti…"
+                                player.start()
+                            }
+                            setOnCompletionListener { player ->
+                                player.release()
+                                if (madinaPlayer === player) madinaPlayer = null
+                                if (liveMode && !waitingForAnswer) {
+                                    status.text = ""
+                                    resumeLiveListening()
+                                }
+                            }
+                            setOnErrorListener { player, _, _ ->
+                                player.release()
+                                if (madinaPlayer === player) madinaPlayer = null
+                                status.text = "Ovoz ijrosida xatolik"
+                                if (liveMode) resumeLiveListening()
+                                true
+                            }
+                            prepareAsync()
+                        }
+                    } catch (e: Exception) {
+                        status.text = "Madina ovozini ijro etib bo‘lmadi: ${e.localizedMessage}"
+                        if (liveMode) resumeLiveListening()
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    status.text = "Madina ovoz xatosi: ${e.localizedMessage}"
+                    Toast.makeText(this, "Azure Speech kaliti va regionini tekshiring", Toast.LENGTH_LONG).show()
+                    if (liveMode) resumeLiveListening()
+                }
+            }
+        }
     }
 
     private fun closeVoiceMode() {
@@ -768,6 +908,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         listening = false
         try { recognizer?.cancel() } catch (_: Exception) {}
         tts?.stop()
+        try { madinaPlayer?.stop(); madinaPlayer?.release() } catch (_: Exception) {}
+        madinaPlayer = null
         voicePanel?.let { root.removeView(it) }
         voicePanel = null
         orb = null
@@ -793,13 +935,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     override fun onInit(result: Int) {
-        if (result == TextToSpeech.SUCCESS) {
-            ttsReady = true
-            val code = tts?.setLanguage(Locale("uz", "UZ"))
-            if (code == TextToSpeech.LANG_MISSING_DATA || code == TextToSpeech.LANG_NOT_SUPPORTED) {
-                tts?.setLanguage(Locale("ru", "RU"))
-            }
-        }
+        // Android TTS ishlatilmaydi: ovoz faqat Azure uz-UZ-MadinaNeural orqali chiqariladi.
+        ttsReady = result == TextToSpeech.SUCCESS
     }
 
     override fun onDestroy() {
@@ -807,6 +944,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         try { recognizer?.destroy() } catch (_: Exception) {}
         tts?.stop()
         tts?.shutdown()
+        try { madinaPlayer?.release() } catch (_: Exception) {}
+        madinaPlayer = null
         super.onDestroy()
     }
 
