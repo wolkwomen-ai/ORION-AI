@@ -44,7 +44,7 @@ jobs:
       - name: Build signed ARION APK
         working-directory: kotlin_arion
         env:
-          ARION_STORE_FILE: app/arion-upload.keystore
+          ARION_STORE_FILE: arion-upload.keystore
           ARION_STORE_PASSWORD: ${{ secrets.ARION_STORE_PASSWORD }}
           ARION_KEY_PASSWORD: ${{ secrets.ARION_KEY_PASSWORD }}
           ARION_KEY_ALIAS: ${{ secrets.ARION_KEY_ALIAS }}
