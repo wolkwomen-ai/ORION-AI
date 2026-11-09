@@ -57,6 +57,7 @@ class MainActivity : Activity() {
     private var listening = false
     private var liveMode = false
     private var voicePanel: View? = null
+    private var collapsedVoiceView: View? = null
     private var orb: OrbView? = null
     private var lastRms = 0f
     private var waitingForAnswer = false
@@ -847,7 +848,23 @@ class MainActivity : Activity() {
 
         val voiceOrb = OrbView(this).apply {
             minimalMode = false
-            contentDescription = "ARION animatsiyali A logotipi"
+            contentDescription = "ARION animatsiyali A logotipi — pastga surib kichraytiring"
+        }
+        var dragStartY = 0f
+        voiceOrb.setOnTouchListener { view, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    dragStartY = event.rawY
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    val movedDown = event.rawY - dragStartY
+                    if (movedDown > dp(55)) collapseVoicePanel()
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> true
+                else -> true
+            }
         }
         panel.addView(voiceOrb, LinearLayout.LayoutParams(dp(248), dp(248)).apply {
             gravity = Gravity.CENTER
@@ -914,6 +931,41 @@ class MainActivity : Activity() {
         }
         liveTranscriptView = null
         status.text = "Sizni tinglayapman…"
+    }
+
+    // A logotipini pastga surish: jonli ovoz davom etadi, chat va yozish paneli qaytadi.
+    private fun collapseVoicePanel() {
+        if (!liveMode || collapsedVoiceView != null) return
+        voicePanel?.let { page.removeView(it) }
+        voicePanel = null
+        collapsedVoiceView?.let { page.removeView(it) }
+        collapsedVoiceView = null
+        scroll.visibility = View.VISIBLE
+
+        val compact = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setBackgroundColor(Color.TRANSPARENT)
+            isClickable = true
+            contentDescription = "ARION ovozli suhbatini kattalashtirish"
+        }
+        val smallA = OrbView(this).apply {
+            minimalMode = false
+            contentDescription = "ARION animatsiyali A — ovozli suhbat davom etmoqda"
+        }
+        compact.addView(smallA, LinearLayout.LayoutParams(dp(64), dp(64)))
+        compact.setOnClickListener { expandVoicePanel() }
+        collapsedVoiceView = compact
+        page.addView(compact, page.indexOfChild(status) + 1,
+            LinearLayout.LayoutParams(-1, dp(72)))
+        status.text = "Madina bilan ovozli suhbat davom etmoqda"
+        scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
+    }
+
+    private fun expandVoicePanel() {
+        collapsedVoiceView?.let { page.removeView(it) }
+        collapsedVoiceView = null
+        if (liveMode) showVoicePanel()
     }
 
     private fun updateLiveTranscript(text: String) {
