@@ -339,7 +339,7 @@ class MainActivity : Activity() {
         drawer.addView(scrollMenu, LinearLayout.LayoutParams(-1, 0, 1f))
 
         val footer = TextView(this).apply {
-            text = "ARION AI  •  1.6"
+            text = "ARION AI  •  3.1"
             textSize = 11f
             setTextColor(Color.GRAY)
             setPadding(dp(8), dp(14), dp(8), dp(4))
