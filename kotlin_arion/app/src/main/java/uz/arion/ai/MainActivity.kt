@@ -487,12 +487,12 @@ class MainActivity : Activity() {
             sendDevelopmentTask("ARION uchun amaliy rivojlanish rejasini tuz. Avval ishonchlilik va mavjud funksiyalarni saqlash, keyin xotira, tahlil, bilimlar bazasi, diagnostika va xavfsiz yangilanishni bosqichlarga ajrat. Har bosqichda maqsad, kerakli ish, sinov mezoni va xavfni yoz. Hozirgi Android ilova imkoniyatlaridan tashqaridagi ishlarni aniq belgilab qo‘y.")
         }
         actionCard("📚  Yangi bilim qo‘shish", "Siz kiritgan qoida yoki ma’lumotni keyingi suhbatlar uchun saqlaydi.") {
-            showDevelopmentNoteDialog("YANGI BILIM", "learning_notes", "ARION bilishi kerak bo‘lgan ma’lumot yoki qoida")
             dialog.dismiss()
+            showDevelopmentNoteDialog("YANGI BILIM", "learning_notes", "ARION bilishi kerak bo‘lgan ma’lumot yoki qoida")
         }
         actionCard("📝  Xato yoki taklif bildirish", "ARION javobidagi xato va takliflaringizni saqlaydi.") {
-            showDevelopmentNoteDialog("FIKR VA XATOLAR", "feedback_notes", "Qaysi xato yoki kamchilikni tuzatish kerak?")
             dialog.dismiss()
+            showDevelopmentNoteDialog("FIKR VA XATOLAR", "feedback_notes", "Qaysi xato yoki kamchilikni tuzatish kerak?")
         }
         actionCard("🩺  Tizim diagnostikasi", "Ilovaning asosiy ruxsatlari va saqlangan rivojlanish qaydlarini tekshiradi.") {
             dialog.dismiss()
@@ -537,7 +537,7 @@ class MainActivity : Activity() {
                 if (value.isNotEmpty()) {
                     val prefs = getSharedPreferences("arion_development", Context.MODE_PRIVATE)
                     val old = prefs.getString(key, "").orEmpty()
-                    val updated = (old.lines().filter { it.isNotBlank() } + "• " + value)
+                    val updated = (old.lines().filter { it.isNotBlank() } + "• $value")
                         .takeLast(20).joinToString("\n")
                     prefs.edit().putString(key, updated).apply()
                     Toast.makeText(this, "Rivojlanish qaydi saqlandi", Toast.LENGTH_SHORT).show()
@@ -592,12 +592,12 @@ class MainActivity : Activity() {
             @Suppress("DEPRECATION")
             packageManager.getPackageInfo(packageName, 0).versionName ?: "noma’lum"
         } catch (_: Exception) { "noma’lum" }
-        val report = "Ilova versiyasi: $version\n" +
-            "Groq API kaliti: " + if (apiReady) "saqlangan ✓" else "kiritilmagan !" + "\n" +
-            "Mikrofon ruxsati: " + if (micReady) "berilgan ✓" else "berilmagan !" + "\n" +
-            "Ovoz aniqlash xizmati: " + if (speechReady) "mavjud ✓" else "topilmadi !" + "\n" +
-            "Saqlangan bilimlar: $learningCount ta\n" +
-            "Fikr va xatolar: $feedbackCount ta\n\n" +
+        val report = "Ilova versiyasi: $version\\n" +
+            "Groq API kaliti: " + (if (apiReady) "saqlangan ✓" else "kiritilmagan !") + "\\n" +
+            "Mikrofon ruxsati: " + (if (micReady) "berilgan ✓" else "berilmagan !") + "\\n" +
+            "Ovoz aniqlash xizmati: " + (if (speechReady) "mavjud ✓" else "topilmadi !") + "\\n" +
+            "Saqlangan bilimlar: $learningCount ta\\n" +
+            "Fikr va xatolar: $feedbackCount ta\\n\\n" +
             "Eslatma: bu mahalliy tekshiruv. Groq serveriga haqiqiy so‘rov yuborib tekshirish alohida amalga oshiriladi."
         android.app.AlertDialog.Builder(this)
             .setTitle("ARION DIAGNOSTIKASI")
