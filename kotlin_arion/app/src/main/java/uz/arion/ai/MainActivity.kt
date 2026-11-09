@@ -1023,15 +1023,15 @@ class MainActivity : Activity() {
     // TTS matnidan Markdown belgilarini olib tashlaymiz; ekrandagi javob o‘zgarmaydi.
     private fun speechFriendlyText(text: String): String {
         return text
-            .replace(Regex("\\\\[([^\\\\]]+)\\\\]\\\\([^)]+\\\\)"), "$1")
-            .replace(Regex("(?m)^\\\\s{0,3}#{1,6}\\\\s*"), "")
-            .replace(Regex("\\\\*\\\\*(.*?)\\\\*\\\\*"), "$1")
-            .replace(Regex("__(.*?)__"), "$1")
-            .replace(Regex("(?m)^\\\\s*[-*+]\\\\s+"), "")
-            .replace(Regex("(?m)^\\\\s*\\\\d+[.)]\\\\s+"), "")
+            .replace(Regex("""\[([^\]]+)\]\([^)]+\)"""), "$1")
+            .replace(Regex("""(?m)^\s{0,3}#{1,6}\s*"""), "")
+            .replace(Regex("""\*\*(.*?)\*\*"""), "$1")
+            .replace(Regex("""__(.*?)__"""), "$1")
+            .replace(Regex("""(?m)^\s*[-*+]\s+"""), "")
+            .replace(Regex("""(?m)^\s*\d+[.)]\s+"""), "")
             .replace("`", "")
-            .replace(Regex("[ \\\\t]{2,}"), " ")
-            .replace(Regex("\\\\n{3,}"), "\\\\n\\\\n")
+            .replace(Regex("""[ \t]{2,}"""), " ")
+            .replace(Regex("""\n{3,}"""), "\n\n")
             .trim()
     }
     private fun speak(text: String) {
