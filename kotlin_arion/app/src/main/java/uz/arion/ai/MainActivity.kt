@@ -871,30 +871,6 @@ class MainActivity : Activity() {
             bottomMargin = dp(18)
         })
 
-        panel.addView(TextView(this).apply {
-            text = "ARION"
-            textSize = 24f
-            letterSpacing = 0.18f
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setTextColor(Color.rgb(25, 35, 55))
-            gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(-1, -2))
-
-        panel.addView(TextView(this).apply {
-            text = "Ovozli suhbat"
-            textSize = 14f
-            setTextColor(Color.rgb(75, 95, 120))
-            gravity = Gravity.CENTER
-            setPadding(0, dp(6), 0, dp(18))
-        }, LinearLayout.LayoutParams(-1, -2))
-
-        panel.addView(TextView(this).apply {
-            text = "Gapiring — ARION sizni tinglayapti"
-            textSize = 13f
-            setTextColor(Color.rgb(65, 80, 100))
-            gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(-1, -2))
-
         voicePanel = panel
         page.addView(panel, 1, LinearLayout.LayoutParams(-1, 0, 1f))
 
