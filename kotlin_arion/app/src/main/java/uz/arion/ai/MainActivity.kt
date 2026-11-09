@@ -674,6 +674,7 @@ class MainActivity : Activity() {
                     "Siz ARION nomli aqlli yordamchisiz. Foydalanuvchiga o‘zbek tilida, hurmat bilan va aniq javob bering. Foydalanuvchining ismi Sardor."))
                 synchronized(chatHistory) { chatHistory.takeLast(10).forEach { messages.put(it) } }
                 messages.put(JSONObject().put("role", "user").put("content", question))
+                // Kamroq tarix va token: javob tezroq kelishi uchun.
                 val payload = JSONObject().put("model", groqModel).put("messages", messages)
                     .put("temperature", 0.6).put("max_completion_tokens", 1000)
                     .put("reasoning_effort", "none")
