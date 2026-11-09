@@ -104,7 +104,9 @@ class MainActivity : Activity() {
         }
         val menu = actionText("☰", Color.WHITE, Color.rgb(35,35,35), 24) { openDrawer() }
         header.addView(menu, LinearLayout.LayoutParams(dp(48), dp(48)))
-        val headerOrb = OrbView(this)\n        orb = headerOrb\n        header.addView(headerOrb, LinearLayout.LayoutParams(dp(40), dp(40)))
+        val headerOrb = OrbView(this)
+        orb = headerOrb
+        header.addView(headerOrb, LinearLayout.LayoutParams(dp(40), dp(40)))
         val titleBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
         titleBox.addView(TextView(this).apply {
             text = "ARION"; textSize = 19f; setTextColor(Color.rgb(30,30,30)); gravity = Gravity.CENTER
@@ -175,6 +177,8 @@ class MainActivity : Activity() {
                     voicePaused = true
                     listening = false
                     try { recognizer?.cancel() } catch (_: Exception) {}
+                    micButton.text = "🎙"
+                    micButton.contentDescription = "Ovozli tinglashni davom ettirish"
                     status.text = "Matn yozishingiz mumkin"
                 }
             }
@@ -968,7 +972,6 @@ class MainActivity : Activity() {
 
         voicePanel?.let { root.removeView(it) }
         voicePanel = null
-        orb = null
         page.gravity = Gravity.NO_GRAVITY
         page.getChildAt(0)?.visibility = View.VISIBLE
         page.getChildAt(1)?.visibility = View.VISIBLE
