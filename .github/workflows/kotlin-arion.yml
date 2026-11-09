@@ -1,4 +1,4 @@
-name: ARION Kotlin Android APK — 2.2.1 Madina Connection Retry
+name: ARION Kotlin Android APK — 2.3 Human-like Conversation and Advice
 
 on:
   workflow_dispatch:
@@ -57,7 +57,7 @@ jobs:
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: ARION-2.2.1-MADINA-FIX-SIGNED-APK
+          name: ARION-2.3-HUMAN-ADVISOR-SIGNED-APK
           path: kotlin_arion/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
