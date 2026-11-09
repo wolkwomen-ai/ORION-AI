@@ -914,7 +914,10 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     failed.release()
                     if (edgePlayer === failed) edgePlayer = null
                     file.delete()
-                    if (liveMode) runOnUiThread { speakWithPhoneVoice(text) }
+                    if (liveMode) runOnUiThread {
+                        status.text = "Madina ovozi ishlamadi. Qayta urinib ko‘ring."
+                        if (!waitingForAnswer) resumeLiveListening()
+                    }
                     true
                 }
                 player.prepare()
@@ -932,30 +935,12 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             } catch (error: Exception) {
                 runOnUiThread {
                     if (liveMode) {
-                        status.text = "Madina ovozi ulanmayapti — telefon ovozi ishlatilmoqda"
-                        speakWithPhoneVoice(text)
+                        status.text = "Madina ovoziga ulanib bo‘lmadi. Internetni tekshiring."
+                        if (!waitingForAnswer) resumeLiveListening()
                     }
                 }
             }
         }
-    }
-
-    private fun speakWithPhoneVoice(text: String) {
-        if (!liveMode || !ttsReady) {
-            if (liveMode) resumeLiveListening()
-            return
-        }
-        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {}
-            override fun onDone(utteranceId: String?) {
-                root.post { if (liveMode && !waitingForAnswer) resumeLiveListening() }
-            }
-            @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String?) {
-                root.post { if (liveMode && !waitingForAnswer) resumeLiveListening() }
-            }
-        })
-        tts?.speak(text.take(3500), TextToSpeech.QUEUE_FLUSH, null, "arion-phone-fallback")
     }
 
     private fun closeVoiceMode() {
