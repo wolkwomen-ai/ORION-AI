@@ -1,4 +1,4 @@
-name: ARION Kotlin Android APK — 3.6 Automatic Task Execution
+name: ARION 4.0 Kotlin Android APK
 
 on:
   workflow_dispatch:
@@ -57,7 +57,7 @@ jobs:
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: ARION-3.6-AUTOMATIC-TASK-EXECUTOR-SIGNED-APK
+          name: ARION-4.0-AUTONOMOUS-AGENT-SIGNED-APK
           path: kotlin_arion/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
