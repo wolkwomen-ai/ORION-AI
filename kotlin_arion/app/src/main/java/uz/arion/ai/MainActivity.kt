@@ -41,6 +41,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var micButton: TextView
     private lateinit var sendButton: TextView
     private lateinit var voiceButton: TextView
+    private lateinit var plusButton: TextView
     private var recognizer: SpeechRecognizer? = null
     private var tts: TextToSpeech? = null
     private var ttsReady = false
@@ -131,10 +132,10 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             }
             elevation = dp(1).toFloat()
         }
-        val plus = actionText("+", Color.rgb(235,235,235), Color.rgb(35,35,35), 27) {
+        plusButton = actionText("+", Color.rgb(235,235,235), Color.rgb(35,35,35), 27) {
             Toast.makeText(this, "Qo‘shimcha imkoniyatlar keyingi bosqichda ulanadi", Toast.LENGTH_SHORT).show()
         }
-        composer.addView(plus, LinearLayout.LayoutParams(dp(40), dp(40)))
+        composer.addView(plusButton, LinearLayout.LayoutParams(dp(40), dp(40)))
 
         input = EditText(this).apply {
             hint = "Xabar yozing"
@@ -675,67 +676,39 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private fun showVoicePanel() {
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(dp(24), dp(24), dp(24), dp(28))
-            background = rounded(Color.rgb(249,249,249), 30).apply {
-                setStroke(dp(1), Color.rgb(230,230,230))
-            }
-            elevation = dp(12).toFloat()
+        // ChatGPT uslubidagi ixcham jonli rejim: faqat A belgisi va composer ichidagi X.
+        plusButton.visibility = View.GONE
+        micButton.visibility = View.GONE
+        sendButton.text = "×"
+        sendButton.contentDescription = "Ovozli suhbatni yopish"
+        sendButton.setOnClickListener { closeVoiceMode() }
+
+        val voiceMark = OrbView(this).apply {
+            minimalMode = true
+            alpha = 0f
+            scaleX = 1.25f
+            scaleY = 1.25f
         }
-        val top = TextView(this).apply {
-            text = "ARION bilan ovozli suhbat"
-            textSize = 19f
-            setTextColor(Color.rgb(35,35,35))
-            gravity = Gravity.CENTER
+        orb = voiceMark
+        val markLp = FrameLayout.LayoutParams(dp(124), dp(124), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
+            bottomMargin = dp(74)
         }
-        panel.addView(top, LinearLayout.LayoutParams(-1, dp(44)))
-        orb = OrbView(this)
-        panel.addView(orb, LinearLayout.LayoutParams(dp(190), dp(190)))
-        val hint = TextView(this).apply {
-            text = "Gapiring — ARION tinglayapti"
-            textSize = 14f
-            setTextColor(Color.DKGRAY)
-            gravity = Gravity.CENTER
-        }
-        panel.addView(hint, LinearLayout.LayoutParams(-1, dp(42)))
-        val buttons = LinearLayout(this).apply { gravity = Gravity.CENTER; orientation = LinearLayout.HORIZONTAL }
-        val mute = actionText("Ⅱ", Color.rgb(230,230,230), Color.DKGRAY, 22) {
-            voicePaused = true
-            if (listening) recognizer?.cancel()
-            listening = false
-            status.text = "Mikrofon pauzada"
-            hint.text = "Davom ettirish uchun mikrofonni bosing"
-        }
-        val end = actionText("×", Color.rgb(210,55,55), Color.WHITE, 28) { closeVoiceMode() }
-        val resume = actionText("🎙", Color.rgb(16,163,127), Color.WHITE, 20) { resumeLiveListening() }
-        buttons.addView(mute, LinearLayout.LayoutParams(dp(54), dp(54)).apply { rightMargin = dp(18) })
-        buttons.addView(end, LinearLayout.LayoutParams(dp(54), dp(54)).apply { rightMargin = dp(18) })
-        buttons.addView(resume, LinearLayout.LayoutParams(dp(54), dp(54)))
-        panel.addView(buttons)
-        panel.setOnTouchListener(object : View.OnTouchListener {
-            var downY = 0f
-            override fun onTouch(v: View, event: MotionEvent): Boolean {
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> { downY = event.rawY; return true }
-                    MotionEvent.ACTION_UP -> {
-                        val delta = event.rawY - downY
-                        if (abs(delta) > dp(70)) closeVoiceMode()
-                        return true
-                    }
-                }
-                return true
-            }
-        })
-        val scrim = FrameLayout(this).apply { setBackgroundColor(0x66000000) }
-        scrim.addView(panel, FrameLayout.LayoutParams(-1, dp(430), Gravity.BOTTOM).apply {
-            leftMargin = dp(10); rightMargin = dp(10); bottomMargin = dp(12)
-        })
-        scrim.setOnClickListener { closeVoiceMode() }
-        panel.setOnClickListener { }
-        voicePanel = scrim
-        root.addView(scrim, FrameLayout.LayoutParams(-1, -1))
+        voicePanel = voiceMark
+        root.addView(voiceMark, markLp)
+        voiceMark.animate()
+            .alpha(1f)
+            .scaleX(0.88f)
+            .scaleY(0.88f)
+            .translationY(0f)
+            .setDuration(420)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .start()
+        voiceMark.translationY = -dp(76).toFloat()
+        voiceMark.animate()
+            .translationY(0f)
+            .setDuration(420)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .start()
     }
 
     private fun resumeLiveListening() {
@@ -764,6 +737,13 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         voicePanel?.let { root.removeView(it) }
         voicePanel = null
         orb = null
+        plusButton.visibility = View.VISIBLE
+        micButton.visibility = View.VISIBLE
+        sendButton.text = if (input.text.toString().isNotBlank()) "↑" else "≋"
+        sendButton.contentDescription = if (input.text.toString().isNotBlank()) "Yuborish" else "Ovozli suhbat"
+        sendButton.setOnClickListener {
+            if (input.text.toString().trim().isNotEmpty()) sendMessage() else openVoiceMode()
+        }
         status.text = ""
     }
 
@@ -805,6 +785,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
     // ARION premium animated A-mark: metallic 3D monogram, energy core and orbital rings.
     private inner class OrbView(context: Context) : View(context) {
+        var minimalMode = false
         private var rotation = 0f
         private val edgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
@@ -838,27 +819,29 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             val pulse = 1f + 0.025f * kotlin.math.sin(Math.toRadians(rotation.toDouble())).toFloat()
             val s = scale * pulse
 
-            // Subtle blue aura behind the metal mark.
-            glowPaint.shader = android.graphics.RadialGradient(
-                cx, cy, unit * 0.49f,
-                intArrayOf(0x6644BFFF, 0x223A8FFF, Color.TRANSPARENT),
-                floatArrayOf(0f, 0.62f, 1f), android.graphics.Shader.TileMode.CLAMP
-            )
-            canvas.drawCircle(cx, cy, unit * 0.49f, glowPaint)
+            if (!minimalMode) {
+                // Normal app icon keeps its metallic aura and orbital rings.
+                glowPaint.shader = android.graphics.RadialGradient(
+                    cx, cy, unit * 0.49f,
+                    intArrayOf(0x6644BFFF, 0x223A8FFF, Color.TRANSPARENT),
+                    floatArrayOf(0f, 0.62f, 1f), android.graphics.Shader.TileMode.CLAMP
+                )
+                canvas.drawCircle(cx, cy, unit * 0.49f, glowPaint)
 
-            val orbitRect = android.graphics.RectF(
-                cx - unit * 0.47f, cy - unit * 0.19f,
-                cx + unit * 0.47f, cy + unit * 0.19f
-            )
-            val orbitSave = canvas.save()
-            canvas.rotate(rotation, cx, cy)
-            ringPaint.strokeWidth = maxOf(1f, unit * 0.018f)
-            ringPaint.alpha = 125
-            canvas.drawOval(orbitRect, ringPaint)
-            canvas.rotate(58f, cx, cy)
-            ringPaint.alpha = 205
-            canvas.drawOval(orbitRect, ringPaint)
-            canvas.restoreToCount(orbitSave)
+                val orbitRect = android.graphics.RectF(
+                    cx - unit * 0.47f, cy - unit * 0.19f,
+                    cx + unit * 0.47f, cy + unit * 0.19f
+                )
+                val orbitSave = canvas.save()
+                canvas.rotate(rotation, cx, cy)
+                ringPaint.strokeWidth = maxOf(1f, unit * 0.018f)
+                ringPaint.alpha = 125
+                canvas.drawOval(orbitRect, ringPaint)
+                canvas.rotate(58f, cx, cy)
+                ringPaint.alpha = 205
+                canvas.drawOval(orbitRect, ringPaint)
+                canvas.restoreToCount(orbitSave)
+            }
 
             val markSave = canvas.save()
             canvas.translate(cx, cy)
@@ -911,25 +894,26 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             facePaint.alpha = 95
             canvas.drawPath(barPath, facePaint)
 
-            // Energy core embedded in the A crossbar.
-            val coreRadius = 7.2f + lastRms.coerceIn(0f, 12f) * 0.18f
-            glowPaint.shader = android.graphics.RadialGradient(
-                0f, 10f, coreRadius * 2.5f,
-                intArrayOf(Color.WHITE, 0xFF72D8FF.toInt(), 0x003B9DFF.toInt()),
-                floatArrayOf(0f, 0.36f, 1f), android.graphics.Shader.TileMode.CLAMP
-            )
-            canvas.drawCircle(0f, 10f, coreRadius * 2.5f, glowPaint)
-            glowPaint.shader = null
-            nodePaint.color = Color.WHITE
-            canvas.drawCircle(0f, 10f, coreRadius * 0.34f, nodePaint)
+            if (!minimalMode) {
+                // Energy core and orbiting particles are reserved for the full app logo.
+                val coreRadius = 7.2f + lastRms.coerceIn(0f, 12f) * 0.18f
+                glowPaint.shader = android.graphics.RadialGradient(
+                    0f, 10f, coreRadius * 2.5f,
+                    intArrayOf(Color.WHITE, 0xFF72D8FF.toInt(), 0x003B9DFF.toInt()),
+                    floatArrayOf(0f, 0.36f, 1f), android.graphics.Shader.TileMode.CLAMP
+                )
+                canvas.drawCircle(0f, 10f, coreRadius * 2.5f, glowPaint)
+                glowPaint.shader = null
+                nodePaint.color = Color.WHITE
+                canvas.drawCircle(0f, 10f, coreRadius * 0.34f, nodePaint)
 
-            // Orbiting energy particles.
-            val radians = Math.toRadians((rotation * 1.7f).toDouble())
-            val px = kotlin.math.cos(radians).toFloat() * 39f
-            val py = kotlin.math.sin(radians).toFloat() * 15f
-            nodePaint.color = Color.rgb(150, 231, 255)
-            canvas.drawCircle(px, py, 2.5f, nodePaint)
-            canvas.drawCircle(-px, -py, 1.7f, nodePaint)
+                val radians = Math.toRadians((rotation * 1.7f).toDouble())
+                val px = kotlin.math.cos(radians).toFloat() * 39f
+                val py = kotlin.math.sin(radians).toFloat() * 15f
+                nodePaint.color = Color.rgb(150, 231, 255)
+                canvas.drawCircle(px, py, 2.5f, nodePaint)
+                canvas.drawCircle(-px, -py, 1.7f, nodePaint)
+            }
 
             canvas.restoreToCount(markSave)
 
