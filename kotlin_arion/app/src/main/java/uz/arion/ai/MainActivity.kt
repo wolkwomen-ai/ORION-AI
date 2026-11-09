@@ -820,7 +820,24 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             val unit = minOf(width, height).toFloat()
             if (unit <= 0f) return
             val scale = unit / 100f
-            // Live voice mode: A belgisi mutlaqo toza — puls, halqa va aylanuvchi effektlarsiz.
+
+            // Jonli ovoz rejimida A orqasida to'rtburchak ramka qoladi.
+            // Ramka statik: aylanuvchi oval halqalar yoki puls effekti yo'q.
+            if (minimalMode) {
+                val frame = android.graphics.RectF(
+                    cx - unit * 0.46f, cy - unit * 0.46f,
+                    cx + unit * 0.46f, cy + unit * 0.46f
+                )
+                val framePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.STROKE
+                    strokeWidth = maxOf(1.4f, unit * 0.018f)
+                    color = Color.rgb(105, 190, 235)
+                    alpha = 185
+                }
+                canvas.drawRoundRect(frame, unit * 0.12f, unit * 0.12f, framePaint)
+            }
+
+            // Live voice mode: A belgisi puls va aylanuvchi halqalarsiz.
             val pulse = if (minimalMode) 1f else
                 1f + 0.025f * kotlin.math.sin(Math.toRadians(rotation.toDouble())).toFloat()
             val s = scale * pulse
