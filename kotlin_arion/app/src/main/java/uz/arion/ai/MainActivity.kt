@@ -484,14 +484,14 @@ class MainActivity : Activity() {
         val detail = EditText(this).apply { hint = "Nima qilish kerak?"; minLines = 3; gravity = Gravity.TOP; textSize = 14f }
         val type = Spinner(this).apply {
             adapter = android.widget.ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
-                listOf("Tadqiqot", "Xabar qoralamasi", "Buyurtma loyihasi"))
+                listOf("Internet tadqiqoti", "Xabar qoralamasi", "Buyurtma loyihasi"))
         }
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(8), dp(18), dp(4))
             addView(title); addView(type); addView(detail)
         }
         android.app.AlertDialog.Builder(this).setTitle("YANGI AGENT TOPSHIRIG‘I").setView(box)
-            .setPositiveButton("REJALASHTIRISH") { _, _ ->
+            .setPositiveButton("AVTOMATIK BAJARISH") { _, _ ->
                 val name = title.text.toString().trim()
                 val info = detail.text.toString().trim()
                 if (name.isBlank() || info.isBlank()) {
@@ -503,12 +503,56 @@ class MainActivity : Activity() {
                         else -> AgentActionType.RESEARCH
                     }
                     val task = agentCore.submit(info, AgentAction(title = name, details = info, type = actionType))
-                    val stateText = if (task.state == AgentTaskState.READY) "Rejalashtirishga qabul qilindi" else "Tasdiq kutilmoqda"
-                    addMessage("ARION", "Agent topshirig‘i saqlandi: $name. Holati: $stateText. Hozir bu topshiriq reja sifatida qayd etildi; tashqi amal bajarilmadi.")
-                    status.text = "Agent topshirig‘i qabul qilindi"
-                    Toast.makeText(this, stateText, Toast.LENGTH_SHORT).show()
+                    if (task.state == AgentTaskState.READY) {
+                        addMessage("Siz", "Agent topshirig‘i: $name")
+                        addMessage("ARION", "Topshiriq avtomatik bajarishga olindi. Internet va AI xizmati tekshirilmoqda…")
+                        executeAgentTask(task)
+                    } else {
+                        addMessage("ARION", "Bu amal xavfsizlik sababli tasdiq kutmoqda.")
+                    }
                 }
             }.setNegativeButton("BEKOR", null).show()
+    }
+
+    // 3.6: read-only research and local drafting now execute instead of merely being stored.
+    // Messages, orders, money transfers, contracts and real trades are never submitted automatically.
+    private fun executeAgentTask(task: AgentTask) {
+        val apiKey = readApiKey()
+        if (apiKey.isNullOrBlank()) {
+            showApiKeyDialog { executeAgentTask(task) }
+            return
+        }
+        status.text = "ARION topshiriqni bajaryapti…"
+        thread(name = "arion-agent-task") {
+            val completed = agentCore.execute(task.id, object : AgentActionExecutor {
+                override fun execute(action: AgentAction): String {
+                    val research = if (action.type == AgentActionType.RESEARCH) searchWeb(action.details) else ""
+                    val system = if (action.type == AgentActionType.RESEARCH) {
+                        "Siz ARION agentisiz. Quyidagi haqiqiy qidiruv natijalariga tayangan holda topshiriqni bajaring. Manbalarni va URLlarni saqlang. Tasdiqlanmagan faktni aniq belgilang. O‘zbek tilida amaliy natija yozing.\n\nQIDIRUV NATIJALARI:\n$research"
+                    } else {
+                        "Siz ARION agentisiz. Faqat foydalanuvchi so‘ragan xabar yoki buyurtma loyihasining qoralamasini tayyorlang. Hech kimga yubormang, buyurtma bermang, akkauntga kirmang. Natijani o‘zbek tilida tayyor matn ko‘rinishida bering."
+                    }
+                    val messages = org.json.JSONArray()
+                        .put(JSONObject().put("role", "system").put("content", system))
+                        .put(JSONObject().put("role", "user").put("content", action.details))
+                    val payload = JSONObject().put("model", groqModel).put("messages", messages)
+                        .put("temperature", 0.2).put("max_completion_tokens", 1400)
+                        .put("reasoning_effort", "none")
+                    val response = aiCompletion(apiKey, payload)
+                    return response.getJSONArray("choices").getJSONObject(0)
+                        .getJSONObject("message").optString("content", "").trim()
+                        .ifBlank { "AI bo‘sh natija qaytardi." }
+                }
+            })
+            runOnUiThread {
+                status.text = ""
+                if (completed.state == AgentTaskState.COMPLETED) {
+                    addMessage("ARION", "✅ ${task.action.title}\n\n${completed.result}")
+                } else {
+                    addMessage("ARION", "❌ Topshiriq bajarilmadi: ${completed.result ?: completed.state}")
+                }
+            }
+        }
     }
 
     private fun showAgentTasks() {
