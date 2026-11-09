@@ -437,6 +437,9 @@ class MainActivity : Activity() {
             panel.addView(v, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
         }
         card("🚀  Daromad biznesini rejalash", "Brend nomi ostida xizmat yoki raqamli mahsulot loyihasini boshlash") { startIncomeBusinessPlan() }
+        card("☁️  Bulutli mustaqil agent", "Serverga ulanib, ARIONning doimiy tadqiqot agentini boshqarish") { openRemoteAgentSettings() }
+        card("▶️  Mustaqil agentni ishga tushirish", "Saqlangan biznes profilingizni serverga yuboradi va birinchi siklni boshlaydi") { startRemoteAgent() }
+        card("📡  Bulutli agent holati", "Oxirgi sikl, vazifalar va server holatini ko‘rish") { showRemoteAgentStatus() }
         card("🕶  Maxfiy biznes profilini sozlash", "Ommaviy brend nomi va ish yo‘nalishini shifrlab saqlash") { openPrivateBusinessProfile() }
         card("＋  Yangi agent topshirig‘i", "Tadqiqot, xabar qoralamasi yoki buyurtma loyihasi") { showAgentTaskDialog() }
         card("📒  Daromad yoki xarajat kiritish", "Summalar telefonda saqlanadi") { showAgentLedgerDialog() }
@@ -446,6 +449,165 @@ class MainActivity : Activity() {
             .setView(ScrollView(this).apply { addView(panel) }).setNegativeButton("YOPISH", null).show()
     }
 
+
+    private fun remoteAgentConfig(): JSONObject? {
+        return runCatching {
+            JSONObject(ArionPrivateStore(this).get("remote_agent_config") ?: return null)
+        }.getOrNull()
+    }
+
+    private fun openRemoteAgentSettings() {
+        val saved = remoteAgentConfig() ?: JSONObject()
+        val endpoint = EditText(this).apply {
+            hint = "HTTPS server manzili, masalan https://arion.example.com"
+            setText(saved.optString("base_url"))
+            setSingleLine(true)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+        }
+        val token = EditText(this).apply {
+            hint = "ARION server maxfiy kaliti"
+            setText(saved.optString("token"))
+            setSingleLine(true)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(4))
+            addView(TextView(this@MainActivity).apply {
+                text = "Bu bo‘lim hozircha server manzili va maxfiy kalitni kutadi. Server hali joylashtirilmagan bo‘lsa, bu yerga tasodifiy manzil kiritmang. Kalit telefonda Android Keystore bilan shifrlanadi."
+                textSize = 12f
+                setTextColor(Color.DKGRAY)
+            })
+            addView(endpoint)
+            addView(token)
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("ARION — BULUTLI SERVER")
+            .setView(ScrollView(this).apply { addView(box) })
+            .setPositiveButton("SHIFRLAB SAQLASH") { _, _ ->
+                val base = endpoint.text.toString().trim().trimEnd('/')
+                val isLocal = base.startsWith("http://10.0.2.2") ||
+                    base.startsWith("http://127.0.0.1") || base.startsWith("http://localhost")
+                if ((!base.startsWith("https://") && !isLocal) || token.text.toString().isBlank()) {
+                    Toast.makeText(this, "HTTPS manzil va server kalitini kiriting", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                try {
+                    ArionPrivateStore(this).put("remote_agent_config",
+                        JSONObject().put("base_url", base).put("token", token.text.toString().trim()).toString())
+                    Toast.makeText(this, "Server sozlamalari shifrlab saqlandi", Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Saqlash xatosi: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNeutralButton("ULANISHNI O‘CHIRISH") { _, _ ->
+                ArionPrivateStore(this).remove("remote_agent_config")
+                Toast.makeText(this, "Server sozlamalari o‘chirildi", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("YOPISH", null)
+            .show()
+    }
+
+    private fun remoteAgentRequest(
+        path: String,
+        method: String = "GET",
+        body: JSONObject? = null,
+        callback: (Boolean, String) -> Unit
+    ) {
+        val config = remoteAgentConfig()
+        if (config == null) {
+            Toast.makeText(this, "Avval bulutli server sozlamalarini kiriting", Toast.LENGTH_LONG).show()
+            openRemoteAgentSettings()
+            return
+        }
+        val base = config.optString("base_url").trimEnd('/')
+        val token = config.optString("token")
+        thread(name = "arion-cloud-agent") {
+            var connection: HttpURLConnection? = null
+            try {
+                connection = (URL(base + path).openConnection() as HttpURLConnection).apply {
+                    requestMethod = method
+                    connectTimeout = 15000
+                    readTimeout = 90000
+                    setRequestProperty("Authorization", "Bearer $token")
+                    setRequestProperty("Accept", "application/json")
+                    if (body != null) {
+                        doOutput = true
+                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                    }
+                }
+                if (body != null) {
+                    connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+                }
+                val code = connection.responseCode
+                val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+                val response = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                runOnUiThread {
+                    if (!isFinishing) callback(code in 200..299, response.ifBlank { "HTTP $code" })
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    if (!isFinishing) callback(false, e.localizedMessage ?: "Server bilan aloqa xatosi")
+                }
+            } finally {
+                connection?.disconnect()
+            }
+        }
+    }
+
+    private fun startRemoteAgent() {
+        val profile = runCatching {
+            JSONObject(ArionPrivateStore(this).get("business_profile") ?: "{}")
+        }.getOrElse { JSONObject() }
+        val brand = profile.optString("brand_alias").trim()
+        val service = profile.optString("service").trim()
+        if (brand.isBlank() || service.isBlank()) {
+            Toast.makeText(this, "Avval biznes profilingizni to‘ldiring", Toast.LENGTH_LONG).show()
+            openPrivateBusinessProfile()
+            return
+        }
+        val budgetUzs = profile.optString("budget_uzs", "0").toLongOrNull() ?: 0L
+        val hours = profile.optString("hours_per_day", "2").toDoubleOrNull() ?: 2.0
+        val payload = JSONObject()
+            .put("brand", brand)
+            .put("skills", profile.optString("skills"))
+            .put("goal", "Brend: $brand. Taklif qilinadigan xizmat yoki mahsulot: $service. Maqsad: noldan mijoz topish va haqiqiy daromadga olib boradigan ish mahsulotlarini tayyorlash.")
+            .put("budget_minor", Math.multiplyExact(budgetUzs, 100L))
+            .put("currency", "UZS")
+            .put("daily_hours", hours.coerceIn(0.5, 16.0))
+        status.text = "Bulutli agent profili yuborilmoqda…"
+        remoteAgentRequest("/v1/profile", "PUT", payload) { ok, response ->
+            if (!ok) {
+                status.text = "Server profil xatosi"
+                addMessage("ARION", "Server profilni qabul qilmadi: ${response.take(500)}")
+            } else {
+                status.text = "Mustaqil agent ishga tushmoqda…"
+                remoteAgentRequest("/v1/agent/start", "POST", JSONObject()) { started, result ->
+                    status.text = if (started) "Bulutli agent faol" else "Agent ishga tushmadi"
+                    addMessage("ARION", if (started)
+                        "Bulutli agent ishga tushdi. Birinchi tadqiqot sikli bajarildi yoki natija serverdan qaytdi.\n${result.take(2500)}"
+                    else "Agentni ishga tushirishda xato: ${result.take(500)}")
+                }
+            }
+        }
+    }
+
+    private fun showRemoteAgentStatus() {
+        status.text = "Bulutli agent holati tekshirilmoqda…"
+        remoteAgentRequest("/v1/agent/status") { ok, response ->
+            status.text = if (ok) "Bulutli server bilan aloqa bor" else "Server holatini olib bo‘lmadi"
+            if (ok) {
+                val data = runCatching { JSONObject(response) }.getOrElse { JSONObject() }
+                val summary = "Faol: ${data.optBoolean("active")}\nSikllar: ${data.optInt("cycle_count")}\nOxirgi sikl: ${data.optString("last_cycle")}\nXato: ${data.optString("last_error")}"
+                addMessage("ARION", summary)
+                remoteAgentRequest("/v1/tasks") { tasksOk, tasksResponse ->
+                    if (tasksOk) addMessage("ARION", "Oxirgi vazifalar:\n${tasksResponse.take(3500)}")
+                }
+            } else {
+                addMessage("ARION", "Server bilan aloqa yo‘q: ${response.take(500)}")
+            }
+        }
+    }
 
     // Ommaviy ishlarda brend taxallusidan foydalanish mumkin; KYC/soliq/bank talablarida
     // platformaga haqiqiy ma'lumot berish shart. Profil Android Keystore bilan shifrlanadi.
