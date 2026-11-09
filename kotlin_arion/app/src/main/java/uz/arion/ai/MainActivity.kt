@@ -14,8 +14,6 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import android.media.MediaPlayer
 import java.io.File
 import java.io.FileOutputStream
@@ -44,7 +42,7 @@ import java.security.KeyStore
 import kotlin.concurrent.thread
 import kotlin.math.abs
 
-class MainActivity : Activity(), TextToSpeech.OnInitListener {
+class MainActivity : Activity() {
     private lateinit var root: FrameLayout
     private lateinit var page: LinearLayout
     private lateinit var chat: LinearLayout
@@ -56,8 +54,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var voiceButton: TextView
     private lateinit var plusButton: TextView
     private var recognizer: SpeechRecognizer? = null
-    private var tts: TextToSpeech? = null
-    private var ttsReady = false
     private var edgePlayer: MediaPlayer? = null
     private var listening = false
     private var liveMode = false
@@ -93,7 +89,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
             WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
-        tts = TextToSpeech(this, this)
         buildScreen()
         addMessage("ARION", "Assalomu alaykum! Men ARIONman. Sizga qanday yordam beray?")
     }
@@ -948,7 +943,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         voicePaused = false
         listening = false
         try { recognizer?.cancel() } catch (_: Exception) {}
-        tts?.stop()
         edgePlayer?.runCatching { stop(); release() }
         edgePlayer = null
 
@@ -987,23 +981,12 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         }
     }
 
-    override fun onInit(result: Int) {
-        if (result == TextToSpeech.SUCCESS) {
-            ttsReady = true
-            val code = tts?.setLanguage(Locale("uz", "UZ"))
-            if (code == TextToSpeech.LANG_MISSING_DATA || code == TextToSpeech.LANG_NOT_SUPPORTED) {
-                tts?.setLanguage(Locale("ru", "RU"))
-            }
-        }
-    }
-
     override fun onDestroy() {
         liveMode = false
         try { recognizer?.destroy() } catch (_: Exception) {}
         tts?.stop()
         edgePlayer?.runCatching { stop(); release() }
         edgePlayer = null
-        tts?.shutdown()
 
         super.onDestroy()
     }
