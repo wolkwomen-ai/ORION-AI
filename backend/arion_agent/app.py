@@ -145,7 +145,7 @@ async def web_search(query: str) -> list[dict[str, str]]:
 async def ai_json(system: str, user: str) -> dict[str, Any]:
     if not AI_KEY:
         raise RuntimeError("ARION_AI_API_KEY serverda sozlanmagan")
-    payload = {"model": AI_MODEL, "temperature": 0.2, "response_format":{"type":"json_object"},
+    payload = {"model": AI_MODEL, "temperature": 0.2, "max_tokens": 700, "response_format":{"type":"json_object"},
                "messages":[{"role":"system","content":system},{"role":"user","content":user}]}
     async with httpx.AsyncClient(timeout=60) as client:
         r = await client.post(AI_URL, headers={"Authorization":f"Bearer {AI_KEY}"},
