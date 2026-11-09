@@ -1351,10 +1351,15 @@ INSONDEK SUHBAT VA MASLAHAT: suhbatni davom etayotgan muloqot deb tushuning; old
                     while (chatHistory.size > 30) chatHistory.removeAt(0)
                 }
             } catch (e: GroqApiException) {
+                val fromOpenRouter = e.message?.startsWith("OpenRouter:") == true
                 answer = when (e.statusCode) {
-                    401 -> "Groq API kaliti noto‘g‘ri yoki bekor qilingan. Menyudan API kalitini yangilang."
-                    429 -> { needsOpenRouterKey = readOpenRouterKey().isNullOrBlank(); "Groq so‘rov limiti tugadi. Zaxira AI sozlamasini tekshiring." }
-                    else -> "Groq xatosi (${e.statusCode}): ${e.message ?: "noma’lum xato"}"
+                    401 -> if (fromOpenRouter) "OpenRouter zaxira kaliti noto‘g‘ri yoki bekor qilingan. Kalitni qayta tekshiring." else "Groq API kaliti noto‘g‘ri yoki bekor qilingan. API kalitini yangilang."
+                    429 -> {
+                        if (!fromOpenRouter) needsOpenRouterKey = readOpenRouterKey().isNullOrBlank()
+                        if (fromOpenRouter) "OpenRouter bepul modelining ham vaqtinchalik limiti tugadi. Birozdan keyin qayta urinib ko‘ring."
+                        else "Groq limiti tugadi. ARION zaxira AI kaliti bo‘lmasa, uni kiriting."
+                    }
+                    else -> (if (fromOpenRouter) "OpenRouter" else "Groq") + " xatosi (${e.statusCode}): ${e.message ?: "noma’lum xato"}"
                 }
             } catch (e: Exception) {
                 answer = "Internet yoki Groq serveriga ulanish xatosi: " +
