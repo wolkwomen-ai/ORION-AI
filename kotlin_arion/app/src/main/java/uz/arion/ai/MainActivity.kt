@@ -170,6 +170,14 @@ class MainActivity : Activity() {
             setOnEditorActionListener { _, actionId, _ ->
                 if (actionId == EditorInfo.IME_ACTION_SEND) { sendMessage(); true } else false
             }
+            setOnFocusChangeListener { _, hasFocus ->
+                if (hasFocus && liveMode) {
+                    voicePaused = true
+                    listening = false
+                    try { recognizer?.cancel() } catch (_: Exception) {}
+                    status.text = "Matn yozishingiz mumkin"
+                }
+            }
         }
         composer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
 
@@ -185,8 +193,8 @@ class MainActivity : Activity() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val hasText = !s.isNullOrBlank()
-                sendButton.text = if (liveMode) "×" else if (hasText) "↑" else "≋"
-                sendButton.contentDescription = if (liveMode) "Ovozli suhbatni yopish" else if (hasText) "Yuborish" else "Ovozli suhbat"
+                sendButton.text = if (hasText) "↑" else if (liveMode) "×" else "≋"
+                sendButton.contentDescription = if (hasText) "Yuborish" else if (liveMode) "Ovozli suhbatni yopish" else "Ovozli suhbat"
             }
             override fun afterTextChanged(s: android.text.Editable?) {}
         })
@@ -554,7 +562,13 @@ class MainActivity : Activity() {
         input.setText("")
         hideKeyboard()
         addMessage("Siz", question)
-        askBackend(question, false)
+        val replyWithMadina = liveMode
+        if (replyWithMadina) {
+            voicePaused = true
+            listening = false
+            try { recognizer?.cancel() } catch (_: Exception) {}
+        }
+        askBackend(question, replyWithMadina)
     }
 
     private fun hideKeyboard() {
@@ -825,9 +839,11 @@ class MainActivity : Activity() {
         // ChatGPT uslubidagi ixcham jonli rejim: faqat A belgisi va composer ichidagi X.
         plusButton.visibility = View.GONE
         micButton.visibility = View.GONE
-        sendButton.text = "×"
-        sendButton.contentDescription = "Ovozli suhbatni yopish"
-        sendButton.setOnClickListener { closeVoiceMode() }
+        sendButton.text = if (input.text.toString().isNotBlank()) "↑" else "×"
+        sendButton.contentDescription = if (input.text.toString().isNotBlank()) "Yuborish" else "Ovozli suhbatni yopish"
+        sendButton.setOnClickListener {
+            if (input.text.toString().trim().isNotEmpty()) sendMessage() else closeVoiceMode()
+        }
 
         // Katta A belgisi yuqoriroqdan paydo bo'ladi, pastga tushib
         // kichrayadi va yozish panelining bevosita tepasida joylashadi.
