@@ -1,4 +1,4 @@
-name: ARION Kotlin Android APK — 3.1 Agent Execution
+name: ARION Kotlin Android APK — 3.2 Web Research Agent
 
 on:
   workflow_dispatch:
@@ -57,7 +57,7 @@ jobs:
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: ARION-3.1-AGENT-EXECUTION-SIGNED-APK
+          name: ARION-3.2-WEB-RESEARCH-AGENT-SIGNED-APK
           path: kotlin_arion/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
