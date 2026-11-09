@@ -10,6 +10,9 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.drawable.GradientDrawable
+import android.media.MediaPlayer
+import android.util.Base64
+import java.io.File
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -58,6 +61,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var pendingTxtContent = ""
     private var pendingTxtName = "arion_eslatma.txt"
     private var liveTranscriptView: TextView? = null
+    private var voicePlayer: MediaPlayer? = null
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun rounded(color: Int, radius: Int): GradientDrawable =
@@ -556,6 +560,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         status.text = "ARION javob tayyorlamoqda…"
         thread {
             var answer: String
+            var madinaAudio: ByteArray? = null
             try {
                 val conn = (URL("http://127.0.0.1:8765/ask").openConnection() as HttpURLConnection)
                 conn.requestMethod = "POST"
@@ -569,8 +574,29 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 val stream = if (code in 200..299) conn.inputStream else conn.errorStream
                 val response = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
                 val json = JSONObject(response)
-                if (code in 200..299) answer = json.optString("answer", "ARION bo‘sh javob oldi.")
-                else answer = json.optString("error", "Server xatosi: $code")
+                if (code in 200..299) {
+                    answer = json.optString("answer", "ARION bo‘sh javob oldi.")
+                    if (speakAnswer && liveMode && answer.isNotBlank()) {
+                        try {
+                            val voiceConn = (URL("http://127.0.0.1:8765/voice").openConnection() as HttpURLConnection)
+                            voiceConn.requestMethod = "POST"
+                            voiceConn.connectTimeout = 5000
+                            voiceConn.readTimeout = 90000
+                            voiceConn.doOutput = true
+                            voiceConn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                            val voiceBody = JSONObject().put("text", answer).toString().toByteArray(Charsets.UTF_8)
+                            voiceConn.outputStream.use { it.write(voiceBody) }
+                            if (voiceConn.responseCode in 200..299) {
+                                madinaAudio = voiceConn.inputStream.use { it.readBytes() }
+                            }
+                            voiceConn.disconnect()
+                        } catch (_: Exception) {
+                            madinaAudio = null
+                        }
+                    }
+                } else {
+                    answer = json.optString("error", "Server xatosi: $code")
+                }
                 conn.disconnect()
             } catch (e: Exception) {
                 answer = "ARION serveriga ulanib bo‘lmadi. Pydroid 3 ichida ARION serverini ishga tushiring (127.0.0.1:8765)."
@@ -580,11 +606,45 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 status.text = ""
                 addMessage("ARION", answer)
                 if (speakAnswer && liveMode) {
-                    speak(answer)
+                    if (madinaAudio != null && madinaAudio!!.isNotEmpty()) {
+                        playMadinaAudio(madinaAudio!!, answer)
+                    } else {
+                        speak(answer)
+                    }
                 } else if (liveMode) {
                     resumeLiveListening()
                 }
             }
+        }
+    }
+
+    private fun playMadinaAudio(bytes: ByteArray, fallbackText: String) {
+        try {
+            voicePlayer?.release()
+            val audioFile = File(cacheDir, "arion_madina_voice.mp3")
+            audioFile.writeBytes(bytes)
+            val player = MediaPlayer()
+            voicePlayer = player
+            player.setDataSource(audioFile.absolutePath)
+            player.setOnCompletionListener {
+                try { it.release() } catch (_: Exception) {}
+                if (voicePlayer === it) voicePlayer = null
+                audioFile.delete()
+                if (liveMode && !waitingForAnswer) resumeLiveListening()
+            }
+            player.setOnErrorListener { mp, _, _ ->
+                try { mp.release() } catch (_: Exception) {}
+                if (voicePlayer === mp) voicePlayer = null
+                audioFile.delete()
+                if (liveMode) speak(fallbackText)
+                true
+            }
+            player.prepareAsync()
+            player.setOnPreparedListener { it.start() }
+        } catch (_: Exception) {
+            voicePlayer?.release()
+            voicePlayer = null
+            if (liveMode) speak(fallbackText)
         }
     }
 
@@ -841,6 +901,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         try { recognizer?.destroy() } catch (_: Exception) {}
         tts?.stop()
         tts?.shutdown()
+        try { voicePlayer?.stop() } catch (_: Exception) {}
+        try { voicePlayer?.release() } catch (_: Exception) {}
+        voicePlayer = null
         super.onDestroy()
     }
 
