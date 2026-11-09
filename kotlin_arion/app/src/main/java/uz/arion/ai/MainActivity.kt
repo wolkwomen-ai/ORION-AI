@@ -1087,42 +1087,84 @@ class MainActivity : Activity() {
             .show()
     }
 
-    // Birinchi haqiqiy internet vositasi: qidiruv natijalari ARION ichida olinadi.
+    // Internet qidiruvi: DuckDuckGo HTML va Lite sahifalarini navbat bilan tekshiradi.
+    // Qidiruv sahifasining HTML tuzilishi o‘zgarsa ham bir nechta selector bilan natija ajratadi.
     private fun searchWeb(query: String): String {
-        val encoded = URLEncoder.encode(query, "UTF-8")
-        val connection = (URL("https://html.duckduckgo.com/html/?q=$encoded").openConnection()
-            as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 10000
-            readTimeout = 12000
-            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/130 Mobile Safari/537.36")
-            setRequestProperty("Accept", "text/html,application/xhtml+xml")
-        }
-        try {
-            val code = connection.responseCode
-            if (code !in 200..299) throw IOException("Qidiruv xizmati HTTP $code")
-            val html = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            val document = Jsoup.parse(html)
-            val results = document.select(".result")
-            val lines = mutableListOf<String>()
-            for (result in results) {
-                if (lines.size >= 6) break
-                val link = result.selectFirst("a.result__a") ?: continue
-                val title = link.text().trim()
-                val rawUrl = link.attr("href").trim()
-                if (title.isBlank() || rawUrl.isBlank()) continue
-                val absolute = if (rawUrl.startsWith("//")) "https:$rawUrl" else rawUrl
-                val parsed = android.net.Uri.parse(absolute)
-                val target = parsed.getQueryParameter("uddg") ?: absolute
-                if (!target.startsWith("https://") && !target.startsWith("http://")) continue
-                val snippet = result.selectFirst(".result__snippet")?.text()?.trim().orEmpty()
-                lines.add("${lines.size + 1}. $title\n${snippet.take(500)}\nManba: $target")
+        val cleanQuery = query.replace(Regex("\\s+"), " ").trim().take(450)
+        if (cleanQuery.isBlank()) throw IOException("Qidiruv so‘rovi bo‘sh.")
+        val encoded = URLEncoder.encode(cleanQuery, "UTF-8")
+        val endpoints = listOf(
+            "https://html.duckduckgo.com/html/?q=$encoded",
+            "https://lite.duckduckgo.com/lite/?q=$encoded"
+        )
+        val failures = mutableListOf<String>()
+        for (endpoint in endpoints) {
+            var connection: HttpURLConnection? = null
+            try {
+                connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 12000
+                    readTimeout = 15000
+                    instanceFollowRedirects = true
+                    setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/130.0.0.0 Mobile Safari/537.36")
+                    setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                    setRequestProperty("Accept-Language", "en-US,en;q=0.9")
+                }
+                val code = connection.responseCode
+                if (code !in 200..299) {
+                    failures.add("HTTP $code")
+                    continue
+                }
+                val html = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val document = Jsoup.parse(html)
+                val containers = document.select(".result, .web-result, .results_links, .result__body, tr")
+                val lines = mutableListOf<String>()
+                val seen = mutableSetOf<String>()
+                for (container in containers) {
+                    if (lines.size >= 8) break
+                    val link = container.selectFirst("a.result__a, a.result-link, a.result__url, a[href]")
+                        ?: continue
+                    val title = link.text().trim()
+                    val rawUrl = link.attr("href").trim()
+                    if (title.length < 4 || rawUrl.isBlank()) continue
+                    val absolute = when {
+                        rawUrl.startsWith("//") -> "https:$rawUrl"
+                        rawUrl.startsWith("/") -> URL(URL(endpoint), rawUrl).toString()
+                        else -> rawUrl
+                    }
+                    val parsed = android.net.Uri.parse(absolute)
+                    val target = parsed.getQueryParameter("uddg") ?: absolute
+                    if (!target.startsWith("https://") && !target.startsWith("http://")) continue
+                    if (target.contains("duckduckgo.com") || !seen.add(target)) continue
+                    val snippet = container.selectFirst(".result__snippet, .result-snippet, .result__extras, td")?.text()?.trim().orEmpty()
+                    lines.add("${lines.size + 1}. $title\\n${snippet.take(450)}\\nManba: $target")
+                }
+                if (lines.isNotEmpty()) return lines.joinToString("\\n\\n")
+
+                // Ba'zi DDG sahifalarida natijalar konteyner klassisiz keladi.
+                val looseLinks = document.select("a.result__a, a.result-link")
+                for (link in looseLinks) {
+                    if (lines.size >= 8) break
+                    val title = link.text().trim()
+                    val rawUrl = link.attr("href").trim()
+                    if (title.length < 4 || rawUrl.isBlank()) continue
+                    val absolute = if (rawUrl.startsWith("//")) "https:$rawUrl" else rawUrl
+                    val parsed = android.net.Uri.parse(absolute)
+                    val target = parsed.getQueryParameter("uddg") ?: absolute
+                    if ((target.startsWith("https://") || target.startsWith("http://")) &&
+                        !target.contains("duckduckgo.com") && seen.add(target)) {
+                        lines.add("${lines.size + 1}. $title\\nManba: $target")
+                    }
+                }
+                if (lines.isNotEmpty()) return lines.joinToString("\\n\\n")
+                failures.add("HTTP 200, lekin sahifada ajratiladigan natija yo‘q")
+            } catch (e: Exception) {
+                failures.add(e.localizedMessage ?: e.javaClass.simpleName)
+            } finally {
+                connection?.disconnect()
             }
-            if (lines.isEmpty()) throw IOException("Qidiruv natijalari olinmadi. Xizmat vaqtincha cheklagan bo‘lishi mumkin.")
-            return lines.joinToString("\n\n")
-        } finally {
-            connection.disconnect()
         }
+        throw IOException("Internet qidiruvi hozir natija bermadi. Sabablar: ${failures.joinToString("; ").take(350)}")
     }
 
     private fun shouldSearchWeb(question: String, forceAgent: Boolean): Boolean {
