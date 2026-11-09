@@ -1,4 +1,4 @@
-name: ARION Kotlin Android APK — 3.4 Independent Agent Core
+name: ARION Kotlin Android APK — 3.5 Income Opportunity Hub
 
 on:
   workflow_dispatch:
@@ -57,7 +57,7 @@ jobs:
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: ARION-3.4-INDEPENDENT-AGENT-SIGNED-APK
+          name: ARION-3.5-INCOME-OPPORTUNITY-HUB-SIGNED-APK
           path: kotlin_arion/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
