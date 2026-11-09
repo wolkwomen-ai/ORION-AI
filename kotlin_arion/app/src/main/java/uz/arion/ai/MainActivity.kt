@@ -978,7 +978,7 @@ class MainActivity : Activity() {
 
         // Kichraytirilgan ovozli rejimda matn chat tarixida ko'rsatiladi.
         var bubble = liveTranscriptView
-        if (bubble == null || bubble.parent != chat) {
+        if (bubble == null || bubble.parent == null) {
             bubble = TextView(this).apply {
                 textSize = 16f
                 setTextColor(Color.rgb(35, 35, 35))
