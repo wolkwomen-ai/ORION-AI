@@ -779,6 +779,68 @@ class MainActivity : Activity() {
             .show()
     }
 
+    // Cheklangan telefon agenti: faqat foydalanuvchi aniq buyurgan xavfsiz Android amallarini taklif qiladi.
+    // Qo‘ng‘iroq va SMS avtomatik yuborilmaydi — faqat telefon terish/yozish oynasi ochiladi.
+    private fun handleDeviceCommand(raw: String): Boolean {
+        val q = raw.trim()
+        val lower = q.lowercase()
+        var title = ""
+        var description = ""
+        var launch: (() -> Unit)? = null
+
+        fun openWeb(url: String, label: String) {
+            title = "$label ochilsinmi?"
+            description = "ARION telefoningizda brauzerni ochadi. Keyingi amalni o‘zingiz bajarasiz."
+            launch = { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+        }
+
+        when {
+            lower in listOf("brauzerni och", "internetni och", "google och", "brauzer och") ->
+                openWeb("https://www.google.com", "Google")
+            lower in listOf("youtube och", "yutub och", "youtube ni och") ->
+                openWeb("https://www.youtube.com", "YouTube")
+            lower in listOf("sozlamalarni och", "telefon sozlamalarini och", "nastroykani och") -> {
+                title = "Telefon sozlamalari ochilsinmi?"
+                description = "ARION Android sozlamalari oynasini ochadi."
+                launch = { startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)) }
+            }
+            lower.startsWith("xaritani och") || lower.startsWith("google xarita och") -> {
+                val place = q.substringAfter("och", "").trim()
+                val uri = if (place.isBlank()) android.net.Uri.parse("geo:0,0")
+                    else android.net.Uri.parse("geo:0,0?q=" + android.net.Uri.encode(place))
+                title = "Xarita ochilsinmi?"
+                description = if (place.isBlank()) "Xarita ilovasi ochiladi." else "Xaritada «$place» qidiriladi."
+                launch = { startActivity(Intent(Intent.ACTION_VIEW, uri)) }
+            }
+            lower.startsWith("raqamga qo'ng'iroq qil ") ||
+                lower.startsWith("raqamga qo‘ng‘iroq qil ") ||
+                lower.startsWith("telefon qil ") -> {
+                val number = q.substringAfterLast(" ").filter { it.isDigit() || it == '+' }
+                if (number.length < 7) return false
+                title = "Raqam terish oynasi ochilsinmi?"
+                description = "$number raqamiga qo‘ng‘iroq qilish oynasi ochiladi. Qo‘ng‘iroqni o‘zingiz tasdiqlaysiz."
+                launch = { startActivity(Intent(Intent.ACTION_DIAL, android.net.Uri.parse("tel:$number"))) }
+            }
+            else -> return false
+        }
+
+        val action = launch ?: return false
+        android.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(description)
+            .setPositiveButton("HA, OCH") { _, _ ->
+                try {
+                    action()
+                    addMessage("ARION", "Bajarildi: kerakli telefon oynasini ochdim. Yakuniy amalni o‘zingiz tasdiqlang.")
+                } catch (e: Exception) {
+                    addMessage("ARION", "Bu amalni ochib bo‘lmadi: ${e.localizedMessage ?: "mos ilova topilmadi"}.")
+                }
+            }
+            .setNegativeButton("BEKOR", null)
+            .show()
+        return true
+    }
+
     private fun openWeather() {
         val uri = android.net.Uri.parse("https://www.google.com/search?q=bugungi+ob-havo")
         startActivity(Intent(Intent.ACTION_VIEW, uri))
@@ -1032,6 +1094,7 @@ class MainActivity : Activity() {
     }
 
     private fun askBackend(question: String, speakAnswer: Boolean) {
+        if (handleDeviceCommand(question)) return
         val apiKey = readApiKey()
         if (apiKey.isNullOrBlank()) {
             showApiKeyDialog { askBackend(question, speakAnswer) }
