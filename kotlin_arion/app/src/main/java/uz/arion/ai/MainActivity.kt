@@ -327,6 +327,7 @@ class MainActivity : Activity() {
         section("ISH VA SUHBAT")
         item("▧", "Rasm tanlash") { chooseImage() }
         item("◉", "Xotira") { openMemory() }
+        item("🧠", "O‘zini rivojlantirish") { openSelfDevelopment() }
         item("✦", "Agent rejimi") { toggleAgentMode() }
         section("QO‘SHIMCHA IMKONIYATLAR")
         item("☁", "Ob-havo") { openWeather() }
@@ -433,6 +434,175 @@ class MainActivity : Activity() {
                 Toast.makeText(this, "Xotira tozalandi", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("YOPISH", null)
+            .show()
+    }
+
+    // ARION o'zini rivojlantirish markazi: foydalanuvchi nazoratidagi bilim, fikr va diagnostika.
+    private fun openSelfDevelopment() {
+        val prefs = getSharedPreferences("arion_development", Context.MODE_PRIVATE)
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+        }
+        panel.addView(TextView(this).apply {
+            text = "ARION o‘z faoliyatini tahlil qiladi, siz bergan fikr va bilimlarni saqlaydi hamda yaxshilanish rejasini taklif qiladi. Bu modelni avtomatik qayta o‘qitmaydi; saqlangan qaydlar keyingi suhbatlarda hisobga olinadi."
+            textSize = 13f
+            setTextColor(Color.DKGRAY)
+            setPadding(0, 0, 0, dp(12))
+        })
+
+        fun actionCard(title: String, detail: String, action: () -> Unit) {
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(14), dp(10), dp(14), dp(10))
+                background = rounded(Color.rgb(246, 248, 251), 14)
+                isClickable = true
+                isFocusable = true
+            }
+            card.addView(TextView(this).apply {
+                text = title
+                textSize = 15f
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setTextColor(Color.rgb(35, 45, 60))
+            })
+            card.addView(TextView(this).apply {
+                text = detail
+                textSize = 12f
+                setTextColor(Color.GRAY)
+                setPadding(0, dp(3), 0, 0)
+            })
+            card.setOnClickListener { action() }
+            panel.addView(card, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(8)
+            })
+        }
+
+        lateinit var dialog: android.app.AlertDialog
+        actionCard("🔎  O‘zini tahlil qilish", "Kuchli va yaxshilanishi kerak bo‘lgan tomonlarini tahlil qiladi.") {
+            dialog.dismiss()
+            sendDevelopmentTask("ARION, o‘z faoliyatingni halol tahlil qil. Hozirgi imkoniyatlaring, cheklovlaring, javob sifati, xatolar xavfi va foydalanuvchiga foydangni ajratib ko‘rsat. Haqiqiy ma’lumot bilan taxminni farqla. 5 ta aniq yaxshilanish taklifini ustuvorlik bo‘yicha ber. O‘zingda yo‘q imkoniyat bor deb da’vo qilma.")
+        }
+        actionCard("🗺  Rivojlanish rejasi", "Keyingi bosqichlar uchun aniq va bosqichma-bosqich reja tuzadi.") {
+            dialog.dismiss()
+            sendDevelopmentTask("ARION uchun amaliy rivojlanish rejasini tuz. Avval ishonchlilik va mavjud funksiyalarni saqlash, keyin xotira, tahlil, bilimlar bazasi, diagnostika va xavfsiz yangilanishni bosqichlarga ajrat. Har bosqichda maqsad, kerakli ish, sinov mezoni va xavfni yoz. Hozirgi Android ilova imkoniyatlaridan tashqaridagi ishlarni aniq belgilab qo‘y.")
+        }
+        actionCard("📚  Yangi bilim qo‘shish", "Siz kiritgan qoida yoki ma’lumotni keyingi suhbatlar uchun saqlaydi.") {
+            showDevelopmentNoteDialog("YANGI BILIM", "learning_notes", "ARION bilishi kerak bo‘lgan ma’lumot yoki qoida")
+            dialog.dismiss()
+        }
+        actionCard("📝  Xato yoki taklif bildirish", "ARION javobidagi xato va takliflaringizni saqlaydi.") {
+            showDevelopmentNoteDialog("FIKR VA XATOLAR", "feedback_notes", "Qaysi xato yoki kamchilikni tuzatish kerak?")
+            dialog.dismiss()
+        }
+        actionCard("🩺  Tizim diagnostikasi", "Ilovaning asosiy ruxsatlari va saqlangan rivojlanish qaydlarini tekshiradi.") {
+            dialog.dismiss()
+            showDevelopmentDiagnostics()
+        }
+        actionCard("📖  Rivojlanish qaydlari", "Saqlangan bilimlar va fikrlarni ko‘rish yoki tozalash.") {
+            dialog.dismiss()
+            showDevelopmentNotes()
+        }
+
+        dialog = android.app.AlertDialog.Builder(this)
+            .setTitle("ARION — O‘ZINI RIVOJLANTIRISH")
+            .setView(ScrollView(this).apply { addView(panel) })
+            .setNegativeButton("YOPISH", null)
+            .create()
+        dialog.show()
+    }
+
+    private fun sendDevelopmentTask(prompt: String) {
+        if (waitingForAnswer) {
+            Toast.makeText(this, "Avval joriy javob tugashini kuting", Toast.LENGTH_SHORT).show()
+            return
+        }
+        addMessage("Siz", "🧠 ARION rivojlanish tahlili")
+        askBackend(prompt, true)
+    }
+
+    private fun showDevelopmentNoteDialog(title: String, key: String, hintText: String) {
+        val editor = EditText(this).apply {
+            hint = hintText
+            minLines = 3
+            maxLines = 7
+            textSize = 15f
+            gravity = Gravity.TOP
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(editor)
+            .setPositiveButton("SAQLASH") { _, _ ->
+                val value = editor.text.toString().trim()
+                if (value.isNotEmpty()) {
+                    val prefs = getSharedPreferences("arion_development", Context.MODE_PRIVATE)
+                    val old = prefs.getString(key, "").orEmpty()
+                    val updated = (old.lines().filter { it.isNotBlank() } + "• " + value)
+                        .takeLast(20).joinToString("\n")
+                    prefs.edit().putString(key, updated).apply()
+                    Toast.makeText(this, "Rivojlanish qaydi saqlandi", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("BEKOR", null)
+            .show()
+    }
+
+    private fun showDevelopmentNotes() {
+        val prefs = getSharedPreferences("arion_development", Context.MODE_PRIVATE)
+        val learning = prefs.getString("learning_notes", "").orEmpty()
+        val feedback = prefs.getString("feedback_notes", "").orEmpty()
+        val memory = getSharedPreferences("arion_memory", Context.MODE_PRIVATE)
+            .getString("notes", "").orEmpty()
+        val content = buildString {
+            append("SAQLANGAN BILIMLAR\n")
+            append(if (learning.isBlank()) "Hozircha yo‘q" else learning)
+            append("\n\nFIKR VA XATOLAR\n")
+            append(if (feedback.isBlank()) "Hozircha yo‘q" else feedback)
+            append("\n\nSHAXSIY XOTIRA\n")
+            append(if (memory.isBlank()) "Hozircha yo‘q" else memory)
+        }
+        val view = TextView(this).apply {
+            text = content
+            textSize = 14f
+            setTextColor(Color.DKGRAY)
+            setPadding(dp(18), dp(12), dp(18), dp(12))
+            setTextIsSelectable(true)
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("ARION RIVOJLANISH QAYDLARI")
+            .setView(ScrollView(this).apply { addView(view) })
+            .setNeutralButton("QAYDLARNI TOZALASH") { _, _ ->
+                prefs.edit().remove("learning_notes").remove("feedback_notes").apply()
+                Toast.makeText(this, "Rivojlanish qaydlari tozalandi", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("YOPISH", null)
+            .show()
+    }
+
+    private fun showDevelopmentDiagnostics() {
+        val prefs = getSharedPreferences("arion_development", Context.MODE_PRIVATE)
+        val apiReady = !readApiKey().isNullOrBlank()
+        val micReady = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        val speechReady = SpeechRecognizer.isRecognitionAvailable(this)
+        val learningCount = prefs.getString("learning_notes", "").orEmpty()
+            .lines().count { it.trim().startsWith("•") }
+        val feedbackCount = prefs.getString("feedback_notes", "").orEmpty()
+            .lines().count { it.trim().startsWith("•") }
+        val version = try {
+            @Suppress("DEPRECATION")
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "noma’lum"
+        } catch (_: Exception) { "noma’lum" }
+        val report = "Ilova versiyasi: $version\n" +
+            "Groq API kaliti: " + if (apiReady) "saqlangan ✓" else "kiritilmagan !" + "\n" +
+            "Mikrofon ruxsati: " + if (micReady) "berilgan ✓" else "berilmagan !" + "\n" +
+            "Ovoz aniqlash xizmati: " + if (speechReady) "mavjud ✓" else "topilmadi !" + "\n" +
+            "Saqlangan bilimlar: $learningCount ta\n" +
+            "Fikr va xatolar: $feedbackCount ta\n\n" +
+            "Eslatma: bu mahalliy tekshiruv. Groq serveriga haqiqiy so‘rov yuborib tekshirish alohida amalga oshiriladi."
+        android.app.AlertDialog.Builder(this)
+            .setTitle("ARION DIAGNOSTIKASI")
+            .setMessage(report)
+            .setPositiveButton("YOPISH", null)
             .show()
     }
 
@@ -670,8 +840,18 @@ class MainActivity : Activity() {
             var answer: String
             try {
                 val messages = org.json.JSONArray()
-                messages.put(JSONObject().put("role", "system").put("content",
-                    "Siz ARION nomli aqlli yordamchisiz. Foydalanuvchiga tabiiy, ravon va tushunarli o‘zbek tilida, hurmat bilan javob bering. Imlo va tinish belgilariga qat’iy rioya qiling: o‘zbek lotin alifbosidagi o‘, g‘, sh, ch harflarini to‘g‘ri yozing; so‘zlarni buzib yoki talaffuzga qarab xato yozmang; gaplarni grammatik jihatdan to‘g‘ri tuzing. Javobni yuborishdan oldin imlo, kelishik qo‘shimchalari, vergul va nuqtalarni tekshiring. Qisqa va aniq yozing, keraksiz takrorlardan qoching. Ovozda o‘qishga qulay bo‘lishi uchun odatda sodda gaplar va oddiy ro‘yxatlardan foydalaning; foydalanuvchi so‘ramasa, jadval, murakkab Markdown, kod bloklari va ortiqcha belgilarni ishlatmang. Raqam, sana va qisqartmalarni imkon qadar aniq va tabiiy ifodalang. Javob matnining mazmunini o‘zgartirmang. Suhbatdoshingiz ismini o‘zi aytsa, shu suhbat davomida aynan o‘sha ism bilan murojaat qiling. Ism aytilmagan bo‘lsa, Sardor deb taxmin qilmang va ismni o‘zingiz to‘qimang; kerak bo‘lsa ismini so‘rang. Suhbatda boshqa odam o‘z ismini aytsa, murojaatni uning ismiga moslang."))
+                val baseSystemPrompt = "Siz ARION nomli aqlli yordamchisiz. Foydalanuvchiga tabiiy, ravon va tushunarli o‘zbek tilida, hurmat bilan javob bering. Imlo va tinish belgilariga qat’iy rioya qiling: o‘zbek lotin alifbosidagi o‘, g‘, sh, ch harflarini to‘g‘ri yozing; so‘zlarni buzib yoki talaffuzga qarab xato yozmang; gaplarni grammatik jihatdan to‘g‘ri tuzing. Javobni yuborishdan oldin imlo, kelishik qo‘shimchalari, vergul va nuqtalarni tekshiring. Qisqa va aniq yozing, keraksiz takrorlardan qoching. Ovozda o‘qishga qulay bo‘lishi uchun odatda sodda gaplar va oddiy ro‘yxatlardan foydalaning; foydalanuvchi so‘ramasa, jadval, murakkab Markdown, kod bloklari va ortiqcha belgilarni ishlatmang. Raqam, sana va qisqartmalarni imkon qadar aniq va tabiiy ifodalang. Javob matnining mazmunini o‘zgartirmang. Suhbatdoshingiz ismini o‘zi aytsa, shu suhbat davomida aynan o‘sha ism bilan murojaat qiling. Ism aytilmagan bo‘lsa, Sardor deb taxmin qilmang va ismni o‘zingiz to‘qimang; kerak bo‘lsa ismini so‘rang. Suhbatda boshqa odam o‘z ismini aytsa, murojaatni uning ismiga moslang."
+                val memoryNotes = getSharedPreferences("arion_memory", Context.MODE_PRIVATE)
+                    .getString("notes", "").orEmpty().take(3000)
+                val developmentPrefs = getSharedPreferences("arion_development", Context.MODE_PRIVATE)
+                val learningNotes = developmentPrefs.getString("learning_notes", "").orEmpty().take(3000)
+                val feedbackNotes = developmentPrefs.getString("feedback_notes", "").orEmpty().take(3000)
+                val savedContext = buildString {
+                    if (memoryNotes.isNotBlank()) append("\\n\\nFoydalanuvchi saqlagan shaxsiy eslatmalar (kontekst sifatida):\\n").append(memoryNotes)
+                    if (learningNotes.isNotBlank()) append("\\n\\nARION uchun foydalanuvchi qo‘shgan bilim va qoidalar:\\n").append(learningNotes)
+                    if (feedbackNotes.isNotBlank()) append("\\n\\nFoydalanuvchining avvalgi fikr va xatolik qaydlari; javob sifatini yaxshilashda hisobga ol:\\n").append(feedbackNotes)
+                }
+                messages.put(JSONObject().put("role", "system").put("content", baseSystemPrompt + savedContext))
                 synchronized(chatHistory) { chatHistory.takeLast(10).forEach { messages.put(it) } }
                 messages.put(JSONObject().put("role", "user").put("content", question))
                 // Kamroq tarix va token: javob tezroq kelishi uchun.
