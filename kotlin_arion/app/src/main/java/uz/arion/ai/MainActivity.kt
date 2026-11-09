@@ -57,6 +57,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var agentMode = false
     private var pendingTxtContent = ""
     private var pendingTxtName = "arion_eslatma.txt"
+    private var liveTranscriptView: TextView? = null
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun rounded(color: Int, radius: Int): GradientDrawable =
@@ -628,9 +629,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     val phrase = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
                     if (phrase.isNotBlank()) {
                         if (liveMode) {
-                            // Yakuniy tanilgan gap ham ovoz rejimida yozish maydonida ko'rinib turadi.
-                            input.setText(phrase)
-                            input.setSelection(input.text.length)
+                            updateLiveTranscript(phrase)
                             askBackend(phrase, true)
                         } else {
                             input.setText((input.text.toString() + " " + phrase).trim())
@@ -648,8 +647,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                             ?.firstOrNull().orEmpty()
                         if (partial.isNotBlank()) {
                             // Gapirayotgan paytda matn tanilgan bo'laklar bilan yangilanadi.
-                            input.setText(partial)
-                            input.setSelection(input.text.length)
+                            updateLiveTranscript(partial)
                         }
                     }
                 }
@@ -705,10 +703,11 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         // tepasiga joylashadi. Boshqa bolalar yashirilgani uchun yuqoriga sakramaydi.
         page.gravity = Gravity.BOTTOM
 
-        // Ovoz rejimida oddiy chat foni (header, yozishmalar va status) yashiriladi.
+        // Sarlavha va status yashiriladi, chat esa shar orqasida ko'rinib turadi.
         page.getChildAt(0)?.visibility = View.GONE
-        page.getChildAt(1)?.visibility = View.GONE
+        page.getChildAt(1)?.visibility = View.VISIBLE
         page.getChildAt(2)?.visibility = View.GONE
+        liveTranscriptView = null
 
         // ChatGPT uslubidagi ixcham jonli rejim: faqat A belgisi va composer ichidagi X.
         plusButton.visibility = View.GONE
@@ -744,6 +743,29 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             .start()
     }
 
+    private fun updateLiveTranscript(text: String) {
+        if (text.isBlank()) return
+        var bubble = liveTranscriptView
+        if (bubble == null) {
+            bubble = TextView(this).apply {
+                textSize = 16f
+                setTextColor(Color.rgb(35, 35, 35))
+                setPadding(dp(14), dp(10), dp(14), dp(10))
+                setTextIsSelectable(true)
+                background = rounded(Color.rgb(240, 240, 240), 20)
+            }
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.END
+                addView(bubble, LinearLayout.LayoutParams((resources.displayMetrics.widthPixels * 0.78f).toInt(), -2))
+            }
+            chat.addView(row, LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(2), dp(4), dp(2), dp(4)) })
+            liveTranscriptView = bubble
+        }
+        bubble.text = text
+        scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
+    }
+
     private fun resumeLiveListening() {
         if (!liveMode || voicePaused || waitingForAnswer || listening || isFinishing) return
         if (recognizer == null && !ensureRecognizer()) return
@@ -758,7 +780,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         tts?.speak(text.take(3500), TextToSpeech.QUEUE_FLUSH, null, "arion-answer")
         root.postDelayed({
             if (liveMode && !waitingForAnswer) {
-                input.setText("")
                 resumeLiveListening()
             }
         }, (text.length.coerceAtMost(3500) * 65L).coerceIn(1800L, 18000L))
