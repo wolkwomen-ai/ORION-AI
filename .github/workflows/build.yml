@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - arion-4.0-autonomous-agent
     paths:
       - 'main.py'
       - 'buildozer.spec'
