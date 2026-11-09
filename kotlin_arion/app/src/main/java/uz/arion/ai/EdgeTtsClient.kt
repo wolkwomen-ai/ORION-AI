@@ -13,9 +13,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * Minimal Edge Read Aloud client for ARION.
- * Uses the public Edge Read Aloud protocol and EdgeToken's v2 Sec-MS-GEC generator.
- * Voice: uz-UZ-MadinaNeural. Network service is unofficial and may change.
+ * Edge Read Aloud client for ARION.
+ * Voice: uz-UZ-MadinaNeural.
  */
 object EdgeTtsClient {
     private const val VOICE = "uz-UZ-MadinaNeural"
@@ -48,7 +47,7 @@ object EdgeTtsClient {
             .url(url)
             .header("Origin", "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold")
             .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36 Edg/155.0.0.0")
-            .header("Accept-Language", "en-US,en;q=0.9")
+            .header("Accept-Language", "uz-UZ,uz;q=0.9,en-US;q=0.8,en;q=0.7")
             .header("Cache-Control", "no-cache")
             .build()
 
@@ -57,10 +56,10 @@ object EdgeTtsClient {
                 opened.countDown()
                 val stamp = edgeTimestamp()
                 val config = "X-Timestamp:$stamp\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n" +
-                    "{\"context\":{\"synthesis\":{\"audio\":{\"metadataoptions\":{\"sentenceBoundaryEnabled\":\"false\",\"wordBoundaryEnabled\":\"false\"},\"outputFormat\":\"audio-24khz-48kbitrate-mono-mp3\"}}}}\r\n"
+                    "{\"context\":{\"synthesis\":{\"audio\":{\"metadataoptions\":{\"sentenceBoundaryEnabled\":\"false\",\"wordBoundaryEnabled\":\"false\"},\"outputFormat\":\"audio-24khz-96kbitrate-mono-mp3\"}}}}\r\n"
                 val safe = escapeXml(clean)
                 val ssml = "X-RequestId:$requestId\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${stamp}Z\r\nPath:ssml\r\n\r\n" +
-                    "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='uz-UZ'><voice name='$VOICE'><prosody rate='+0%' volume='+0%'>$safe</prosody></voice></speak>"
+                    "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='uz-UZ'><voice name='$VOICE'><prosody rate='+3%' pitch='+0Hz' volume='+0%'>$safe</prosody></voice></speak>"
                 if (!webSocket.send(config) || !webSocket.send(ssml)) {
                     failure.set(IllegalStateException("Edge TTS so‘rovi yuborilmadi"))
                     completed.countDown()
@@ -132,7 +131,7 @@ object EdgeTtsClient {
             when (c) {
                 '&' -> append("&amp;")
                 '<' -> append("&lt;")
-                '>' -> append("&gt;")
+                '>' -> append("&gt;')
                 else -> if (c.code !in 0..8 && c.code !in 11..12 && c.code !in 14..31) append(c) else append(' ')
             }
         }
