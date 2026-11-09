@@ -104,7 +104,7 @@ class MainActivity : Activity() {
         }
         val menu = actionText("☰", Color.WHITE, Color.rgb(35,35,35), 24) { openDrawer() }
         header.addView(menu, LinearLayout.LayoutParams(dp(48), dp(48)))
-        header.addView(OrbView(this), LinearLayout.LayoutParams(dp(40), dp(40)))
+        val headerOrb = OrbView(this)\n        orb = headerOrb\n        header.addView(headerOrb, LinearLayout.LayoutParams(dp(40), dp(40)))
         val titleBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
         titleBox.addView(TextView(this).apply {
             text = "ARION"; textSize = 19f; setTextColor(Color.rgb(30,30,30)); gravity = Gravity.CENTER
@@ -757,6 +757,7 @@ class MainActivity : Activity() {
                     if (phrase.isNotBlank()) {
                         if (liveMode) {
                             updateLiveTranscript(phrase)
+                            liveTranscriptView = null
                             askBackend(phrase, true)
                         } else {
                             input.setText((input.text.toString() + " " + phrase).trim())
@@ -826,50 +827,45 @@ class MainActivity : Activity() {
     }
 
     private fun showVoicePanel() {
-        // Ovoz rejimida composer sahifaning eng pastiga — telefon navigatsiya paneli
-        // tepasiga joylashadi. Boshqa bolalar yashirilgani uchun yuqoriga sakramaydi.
-        page.gravity = Gravity.BOTTOM
-
-        // Sarlavha va status yashiriladi, chat esa shar orqasida ko'rinib turadi.
-        page.getChildAt(0)?.visibility = View.GONE
+        // Ovozli suhbat alohida ekran emas: matnli chat, tarix va yozish maydoni
+        // o'z joyida qoladi. Shu bitta oynada gapirish ham, yozish ham mumkin.
+        page.gravity = Gravity.NO_GRAVITY
+        page.getChildAt(0)?.visibility = View.VISIBLE
         page.getChildAt(1)?.visibility = View.VISIBLE
-        page.getChildAt(2)?.visibility = View.GONE
-        liveTranscriptView = null
-
-        // ChatGPT uslubidagi ixcham jonli rejim: faqat A belgisi va composer ichidagi X.
-        plusButton.visibility = View.GONE
-        micButton.visibility = View.GONE
+        page.getChildAt(2)?.visibility = View.VISIBLE
+        plusButton.visibility = View.VISIBLE
+        micButton.visibility = View.VISIBLE
+        micButton.text = "Ⅱ"
+        micButton.contentDescription = "Ovozli tinglashni pauza qilish"
+        micButton.setOnClickListener {
+            val player = edgePlayer
+            if (player != null && runCatching { player.isPlaying }.getOrDefault(false)) {
+                runCatching { player.stop(); player.release() }
+                edgePlayer = null
+                status.text = "Madina ovozi to'xtatildi"
+                voicePaused = false
+                resumeLiveListening()
+            } else if (listening) {
+                voicePaused = true
+                listening = false
+                try { recognizer?.cancel() } catch (_: Exception) {}
+                micButton.text = "🎙"
+                micButton.contentDescription = "Ovozli tinglashni davom ettirish"
+                status.text = "Ovozli tinglash pauzada"
+            } else if (!waitingForAnswer) {
+                hideKeyboard()
+                input.clearFocus()
+                voicePaused = false
+                resumeLiveListening()
+            }
+        }
         sendButton.text = if (input.text.toString().isNotBlank()) "↑" else "×"
         sendButton.contentDescription = if (input.text.toString().isNotBlank()) "Yuborish" else "Ovozli suhbatni yopish"
         sendButton.setOnClickListener {
             if (input.text.toString().trim().isNotEmpty()) sendMessage() else closeVoiceMode()
         }
-
-        // Katta A belgisi yuqoriroqdan paydo bo'ladi, pastga tushib
-        // kichrayadi va yozish panelining bevosita tepasida joylashadi.
-        val voiceMark = OrbView(this).apply {
-            minimalMode = true
-            alpha = 0f
-            scaleX = 1.65f
-            scaleY = 1.65f
-        }
-        orb = voiceMark
-        val markLp = FrameLayout.LayoutParams(dp(150), dp(150), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
-            bottomMargin = dp(74)
-        }
-        voicePanel = voiceMark
-        // Katta belgi yuqoridan aniq ko'rinadigan masofadan tushib,
-        // yozish paneli ustida kichik va ixcham holatda to'xtaydi.
-        voiceMark.translationY = -dp(170).toFloat()
-        root.addView(voiceMark, markLp)
-        voiceMark.animate()
-            .alpha(1f)
-            .scaleX(0.58f)
-            .scaleY(0.58f)
-            .translationY(dp(20).toFloat())
-            .setDuration(1050)
-            .setInterpolator(android.view.animation.DecelerateInterpolator())
-            .start()
+        liveTranscriptView = null
+        status.text = "Ovozli suhbat tayyor"
     }
 
     private fun updateLiveTranscript(text: String) {
@@ -900,8 +896,14 @@ class MainActivity : Activity() {
         if (recognizer == null && !ensureRecognizer()) return
         status.text = "Sizni tinglayapman…"
         voicePaused = false
+        micButton.text = "Ⅱ"
+        micButton.contentDescription = "Ovozli tinglashni pauza qilish"
         try { recognizer?.startListening(speechIntent()) }
-        catch (_: Exception) { status.text = "Mikrofonni qayta yoqish uchun 🎙 bosing" }
+        catch (_: Exception) {
+            micButton.text = "🎙"
+            micButton.contentDescription = "Ovozli tinglashni davom ettirish"
+            status.text = "Mikrofonni qayta yoqish uchun 🎙 bosing"
+        }
     }
 
     private fun speak(text: String) {
@@ -918,7 +920,10 @@ class MainActivity : Activity() {
                     finished.release()
                     if (edgePlayer === finished) edgePlayer = null
                     file.delete()
-                    if (liveMode && !waitingForAnswer) resumeLiveListening()
+                    if (liveMode && !waitingForAnswer) {
+                        micButton.text = "🎙"
+                        resumeLiveListening()
+                    }
                 }
                 player.setOnErrorListener { failed, _, _ ->
                     failed.release()
@@ -970,6 +975,9 @@ class MainActivity : Activity() {
         page.getChildAt(2)?.visibility = View.VISIBLE
         plusButton.visibility = View.VISIBLE
         micButton.visibility = View.VISIBLE
+        micButton.text = "🎙"
+        micButton.contentDescription = "Ovozli matn kiritish"
+        micButton.setOnClickListener { startDictation() }
         sendButton.text = if (input.text.toString().isNotBlank()) "↑" else "≋"
         sendButton.contentDescription = if (input.text.toString().isNotBlank()) "Yuborish" else "Ovozli suhbat"
         sendButton.setOnClickListener {
