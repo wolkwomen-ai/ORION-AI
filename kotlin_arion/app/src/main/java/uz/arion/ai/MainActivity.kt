@@ -871,6 +871,13 @@ class MainActivity : Activity() {
             bottomMargin = dp(18)
         })
 
+        panel.addView(TextView(this).apply {
+            text = "Gapiring — ARION sizni tinglayapti"
+            textSize = 13f
+            setTextColor(Color.rgb(65, 80, 100))
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(-1, -2))
+
         voicePanel = panel
         page.addView(panel, 1, LinearLayout.LayoutParams(-1, 0, 1f))
 
