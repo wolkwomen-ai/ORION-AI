@@ -494,6 +494,10 @@ class MainActivity : Activity() {
             dialog.dismiss()
             showDevelopmentNoteDialog("FIKR VA XATOLAR", "feedback_notes", "Qaysi xato yoki kamchilikni tuzatish kerak?")
         }
+        actionCard("💡  ARIONdan rivojlanish taklifi olish", "ARION o‘z imkoniyatlarini tahlil qilib, yaxshilanish takliflarini beradi.") {
+            dialog.dismiss()
+            sendDevelopmentTask("ARION, hozirgi ilova imkoniyatlaring va cheklovlaringni hisobga olib, xavfsiz va amaliy 5 ta rivojlanish taklifini tuz. Har bir taklif uchun foyda, kerakli kod o‘zgarishi, sinov usuli va xavfni yoz. O‘zing mustaqil bajara olmaydigan ishlarni ochiq ayt. Hech qanday o‘zgarish tasdiqlangan deb hisoblama.")
+        }
         actionCard("🛠  Yangi o‘zgarish taklif qilish", "ARIONni yaxshilash uchun taklif yoki tuzatish talabini kiriting.") {
             dialog.dismiss()
             showChangeRequestDialog()
