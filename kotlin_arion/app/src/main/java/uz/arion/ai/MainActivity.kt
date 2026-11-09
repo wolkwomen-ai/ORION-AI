@@ -688,6 +688,10 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private fun showVoicePanel() {
+        // Ovoz rejimida composer sahifaning eng pastiga — telefon navigatsiya paneli
+        // tepasiga joylashadi. Boshqa bolalar yashirilgani uchun yuqoriga sakramaydi.
+        page.gravity = Gravity.BOTTOM
+
         // Ovoz rejimida oddiy chat foni (header, yozishmalar va status) yashiriladi.
         page.getChildAt(0)?.visibility = View.GONE
         page.getChildAt(1)?.visibility = View.GONE
@@ -753,6 +757,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         voicePanel?.let { root.removeView(it) }
         voicePanel = null
         orb = null
+        page.gravity = Gravity.NO_GRAVITY
         page.getChildAt(0)?.visibility = View.VISIBLE
         page.getChildAt(1)?.visibility = View.VISIBLE
         page.getChildAt(2)?.visibility = View.VISIBLE
