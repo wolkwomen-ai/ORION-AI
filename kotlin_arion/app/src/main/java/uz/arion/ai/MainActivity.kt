@@ -834,12 +834,52 @@ class MainActivity : Activity() {
     }
 
     private fun showVoicePanel() {
-        // Ovozli suhbat alohida ekran emas: matnli chat, tarix va yozish maydoni
-        // o'z joyida qoladi. Shu bitta oynada gapirish ham, yozish ham mumkin.
-        page.gravity = Gravity.NO_GRAVITY
-        page.getChildAt(0)?.visibility = View.VISIBLE
-        page.getChildAt(1)?.visibility = View.VISIBLE
-        page.getChildAt(2)?.visibility = View.VISIBLE
+        // Katta ovozli ekran: chat yashiriladi, markazda to'liq animatsiyali A ko'rinadi.
+        scroll.visibility = View.GONE
+
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setBackgroundColor(Color.rgb(8, 13, 25))
+            setPadding(dp(18), dp(18), dp(18), dp(18))
+        }
+
+        val voiceOrb = OrbView(this).apply {
+            minimalMode = false
+            contentDescription = "ARION animatsiyali A logotipi"
+        }
+        panel.addView(voiceOrb, LinearLayout.LayoutParams(dp(248), dp(248)).apply {
+            gravity = Gravity.CENTER
+            bottomMargin = dp(18)
+        })
+
+        panel.addView(TextView(this).apply {
+            text = "ARION"
+            textSize = 24f
+            letterSpacing = 0.18f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(-1, -2))
+
+        panel.addView(TextView(this).apply {
+            text = "Ovozli suhbat"
+            textSize = 14f
+            setTextColor(Color.rgb(155, 190, 220))
+            gravity = Gravity.CENTER
+            setPadding(0, dp(6), 0, dp(18))
+        }, LinearLayout.LayoutParams(-1, -2))
+
+        panel.addView(TextView(this).apply {
+            text = "Gapiring — ARION sizni tinglayapti"
+            textSize = 13f
+            setTextColor(Color.rgb(190, 210, 230))
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(-1, -2))
+
+        voicePanel = panel
+        page.addView(panel, 1, LinearLayout.LayoutParams(-1, 0, 1f))
+
         plusButton.visibility = View.VISIBLE
         micButton.visibility = View.VISIBLE
         micButton.text = "Ⅱ"
@@ -872,7 +912,7 @@ class MainActivity : Activity() {
             if (input.text.toString().trim().isNotEmpty()) sendMessage() else closeVoiceMode()
         }
         liveTranscriptView = null
-        status.text = "Ovozli suhbat tayyor"
+        status.text = "Sizni tinglayapman…"
     }
 
     private fun updateLiveTranscript(text: String) {
@@ -979,12 +1019,9 @@ class MainActivity : Activity() {
         edgePlayer?.runCatching { stop(); release() }
         edgePlayer = null
 
-        voicePanel?.let { root.removeView(it) }
+        voicePanel?.let { page.removeView(it) }
         voicePanel = null
-        page.gravity = Gravity.NO_GRAVITY
-        page.getChildAt(0)?.visibility = View.VISIBLE
-        page.getChildAt(1)?.visibility = View.VISIBLE
-        page.getChildAt(2)?.visibility = View.VISIBLE
+        scroll.visibility = View.VISIBLE
         plusButton.visibility = View.VISIBLE
         micButton.visibility = View.VISIBLE
         micButton.text = "🎙"
