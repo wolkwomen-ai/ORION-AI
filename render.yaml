@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: arion-agent
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerContext: ./backend/arion_agent
+    dockerfilePath: ./backend/arion_agent/Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: ARION_API_TOKEN
+        generateValue: true
+      - key: ARION_AI_API_KEY
+        sync: false
+      - key: ARION_CYCLE_SECONDS
+        value: "3600"
+      - key: ARION_DB_PATH
+        value: /tmp/arion.sqlite3
