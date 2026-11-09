@@ -67,6 +67,8 @@ class MainActivity : Activity() {
     private var pendingVoiceMode = false
     private var voicePaused = false
     private var agentMode = false
+    private val agentCore = ArionAgentCore()
+    private var agentLedgerLoaded = false
     private var pendingTxtContent = ""
     private var pendingTxtName = "arion_eslatma.txt"
     private var liveTranscriptView: TextView? = null
@@ -334,6 +336,7 @@ class MainActivity : Activity() {
         item("◉", "Xotira") { openMemory() }
         item("🧠", "O‘zini rivojlantirish") { openSelfDevelopment() }
         item("✦", "Agent rejimi") { toggleAgentMode() }
+        item("🧠", "Mustaqil agent markazi") { openAgentCenter() }
         section("QO‘SHIMCHA IMKONIYATLAR")
         item("☁", "Ob-havo") { openWeather() }
         item("▤", "TXT fayl yaratish") { createTxtFile() }
@@ -344,7 +347,7 @@ class MainActivity : Activity() {
         drawer.addView(scrollMenu, LinearLayout.LayoutParams(-1, 0, 1f))
 
         val footer = TextView(this).apply {
-            text = "ARION AI  •  3.1"
+            text = "ARION AI  •  3.4"
             textSize = 11f
             setTextColor(Color.GRAY)
             setPadding(dp(8), dp(14), dp(8), dp(4))
@@ -405,6 +408,137 @@ class MainActivity : Activity() {
         }
         status.text = message
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+
+
+    // ARION 3.4: vazifalar va moliyaviy daftar uchun boshqaruv markazi.
+    // Hozirgi versiyada agent faqat tadqiqot/reja/qoralama yaratadi; tashqi amallar yoqilmagan.
+    private fun openAgentCenter() {
+        loadAgentLedgerOnce()
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+        }
+        panel.addView(TextView(this).apply {
+            text = "ARION vazifalarni rejalashtiradi va daromad-xarajatlarni hisoblaydi. Xabar yuborish, buyurtmani tasdiqlash, pul o‘tkazish va real savdo hozircha avtomatik bajarilmaydi."
+            textSize = 13f; setTextColor(Color.DKGRAY)
+        })
+        fun card(title: String, detail: String, click: () -> Unit) {
+            val v = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(10), dp(14), dp(10))
+                background = rounded(Color.rgb(246,248,251), 14); isClickable = true; isFocusable = true
+            }
+            v.addView(TextView(this).apply { text = title; textSize = 15f; typeface = android.graphics.Typeface.DEFAULT_BOLD; setTextColor(Color.rgb(35,45,60)) })
+            v.addView(TextView(this).apply { text = detail; textSize = 12f; setTextColor(Color.GRAY) })
+            v.setOnClickListener { click() }
+            panel.addView(v, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        }
+        card("＋  Yangi agent topshirig‘i", "Tadqiqot, xabar qoralamasi yoki buyurtma loyihasi") { showAgentTaskDialog() }
+        card("📒  Daromad yoki xarajat kiritish", "Summalar telefonda saqlanadi") { showAgentLedgerDialog() }
+        card("📊  Hisob-kitobni ko‘rish", "Jami daromad, xarajat va sof natija") { showAgentLedgerSummary() }
+        card("📋  Joriy vazifalar", "Agent yadrosiga yuborilgan topshiriqlar") { showAgentTasks() }
+        android.app.AlertDialog.Builder(this).setTitle("ARION — MUSTAQIL AGENT")
+            .setView(ScrollView(this).apply { addView(panel) }).setNegativeButton("YOPISH", null).show()
+    }
+
+    private fun showAgentTaskDialog() {
+        val title = EditText(this).apply { hint = "Topshiriq nomi"; textSize = 15f }
+        val detail = EditText(this).apply { hint = "Nima qilish kerak?"; minLines = 3; gravity = Gravity.TOP; textSize = 14f }
+        val type = Spinner(this).apply {
+            adapter = android.widget.ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+                listOf("Tadqiqot", "Xabar qoralamasi", "Buyurtma loyihasi"))
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(8), dp(18), dp(4))
+            addView(title); addView(type); addView(detail)
+        }
+        android.app.AlertDialog.Builder(this).setTitle("YANGI AGENT TOPSHIRIG‘I").setView(box)
+            .setPositiveButton("REJALASHTIRISH") { _, _ ->
+                val name = title.text.toString().trim()
+                val info = detail.text.toString().trim()
+                if (name.isBlank() || info.isBlank()) {
+                    Toast.makeText(this, "Topshiriq nomi va tafsilotini kiriting", Toast.LENGTH_LONG).show()
+                } else {
+                    val actionType = when (type.selectedItemPosition) {
+                        1 -> AgentActionType.DRAFT_MESSAGE
+                        2 -> AgentActionType.CREATE_ORDER_DRAFT
+                        else -> AgentActionType.RESEARCH
+                    }
+                    val task = agentCore.submit(info, AgentAction(title = name, details = info, type = actionType))
+                    val stateText = if (task.state == AgentTaskState.READY) "Rejalashtirishga qabul qilindi" else "Tasdiq kutilmoqda"
+                    addMessage("ARION", "Agent topshirig‘i saqlandi: $name. Holati: $stateText. Hozir bu topshiriq reja sifatida qayd etildi; tashqi amal bajarilmadi.")
+                    status.text = "Agent topshirig‘i qabul qilindi"
+                    Toast.makeText(this, stateText, Toast.LENGTH_SHORT).show()
+                }
+            }.setNegativeButton("BEKOR", null).show()
+    }
+
+    private fun showAgentTasks() {
+        val tasks = agentCore.getTasks()
+        val message = if (tasks.isEmpty()) "Hozircha vazifa yo‘q." else tasks.joinToString("\n\n") {
+            "• ${it.action.title}\nHolati: ${it.state}\nTafsilot: ${it.action.details}"
+        }
+        android.app.AlertDialog.Builder(this).setTitle("AGENT VAZIFALARI")
+            .setMessage(message).setPositiveButton("YOPISH", null).show()
+    }
+
+    private fun loadAgentLedgerOnce() {
+        if (agentLedgerLoaded) return
+        val rows = try { org.json.JSONArray(getSharedPreferences("arion_agent", Context.MODE_PRIVATE).getString("ledger", "[]")) }
+            catch (_: Exception) { org.json.JSONArray() }
+        for (i in 0 until rows.length()) {
+            val row = rows.optJSONObject(i) ?: continue
+            runCatching {
+                agentCore.recordLedgerEntry(AgentLedgerEntry(
+                    label = row.optString("label"), amountMinor = row.optLong("amount"),
+                    currency = row.optString("currency", "UZS"), isIncome = row.optBoolean("income"),
+                    timestampEpochMs = row.optLong("time")
+                ))
+            }
+        }
+        agentLedgerLoaded = true
+    }
+
+    private fun showAgentLedgerDialog() {
+        loadAgentLedgerOnce()
+        val label = EditText(this).apply { hint = "Izoh (masalan: ish haqi, oziq-ovqat)" }
+        val amount = EditText(this).apply { hint = "Summa, so‘m"; inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL }
+        val kind = Spinner(this).apply {
+            adapter = android.widget.ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("Daromad", "Xarajat"))
+        }
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(8), dp(18), dp(4)); addView(label); addView(amount); addView(kind) }
+        android.app.AlertDialog.Builder(this).setTitle("MOLIYAVIY DAFTAR").setView(box)
+            .setPositiveButton("SAQLASH") { _, _ ->
+                val value = runCatching { java.math.BigDecimal(amount.text.toString().trim()).movePointRight(2).longValueExact() }.getOrNull()
+                if (label.text.isNullOrBlank() || value == null || value <= 0L) {
+                    Toast.makeText(this, "Izoh va to‘g‘ri summani kiriting", Toast.LENGTH_LONG).show()
+                } else {
+                    val income = kind.selectedItemPosition == 0
+                    val entry = AgentLedgerEntry(label = label.text.toString().trim(), amountMinor = value, currency = "UZS", isIncome = income)
+                    agentCore.recordLedgerEntry(entry)
+                    val prefs = getSharedPreferences("arion_agent", Context.MODE_PRIVATE)
+                    val rows = try { org.json.JSONArray(prefs.getString("ledger", "[]")) } catch (_: Exception) { org.json.JSONArray() }
+                    rows.put(JSONObject().put("label", entry.label).put("amount", entry.amountMinor)
+                        .put("currency", entry.currency).put("income", entry.isIncome).put("time", entry.timestampEpochMs))
+                    prefs.edit().putString("ledger", rows.toString()).apply()
+                    Toast.makeText(this, "Hisobga saqlandi", Toast.LENGTH_SHORT).show()
+                    showAgentLedgerSummary()
+                }
+            }.setNegativeButton("BEKOR", null).show()
+    }
+
+    private fun showAgentLedgerSummary() {
+        loadAgentLedgerOnce()
+        val entries = agentCore.getLedger()
+        val income = entries.filter { it.isIncome && it.currency == "UZS" }.sumOf { it.amountMinor }
+        val expense = entries.filter { !it.isIncome && it.currency == "UZS" }.sumOf { it.amountMinor }
+        val fmt = java.text.NumberFormat.getIntegerInstance(java.util.Locale("uz", "UZ"))
+        val recent = entries.takeLast(8).asReversed().joinToString("\n") {
+            (if (it.isIncome) "+ " else "− ") + fmt.format(it.amountMinor / 100.0) + " so‘m — " + it.label
+        }
+        val body = "Daromad: ${fmt.format(income / 100.0)} so‘m\nXarajat: ${fmt.format(expense / 100.0)} so‘m\nSof natija: ${fmt.format((income-expense) / 100.0)} so‘m\n\nOxirgi yozuvlar:\n" + if (recent.isBlank()) "Hali yozuv yo‘q." else recent
+        android.app.AlertDialog.Builder(this).setTitle("ARION HISOB-KITOBI")
+            .setMessage(body).setPositiveButton("YOPISH", null).show()
     }
 
     private fun openMemory() {
