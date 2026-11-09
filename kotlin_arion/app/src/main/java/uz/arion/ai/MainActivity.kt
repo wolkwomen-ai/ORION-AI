@@ -1432,13 +1432,14 @@ class MainActivity : Activity() {
                     }
                 }
             } catch (error: Exception) {
+                val detail = (error.message ?: error.javaClass.simpleName)
+                    .replace(Regex("\\s+"), " ")
+                    .take(150)
                 runOnUiThread {
-                    if (liveMode) {
-                        status.text = "Madina ovoziga ulanib bo‘lmadi. Internetni tekshiring."
-                        if (!waitingForAnswer) resumeLiveListening()
-                    } else {
-                        status.text = "Madina ovoziga ulanib bo‘lmadi. Internetni tekshiring."
-                    }
+                    val message = "Madina ulanish xatosi: $detail"
+                    status.text = message
+                    Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                    if (liveMode && !waitingForAnswer) resumeLiveListening()
                 }
             }
         }
