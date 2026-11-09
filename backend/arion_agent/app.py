@@ -253,7 +253,14 @@ async def start_agent():
     with db() as c:
         c.execute("UPDATE profile SET active=1,updated_at=? WHERE id=1",(now(),))
     audit("agent_started",{})
-    return {"active":True,"cycle_seconds":CYCLE_SECONDS}
+    # Do the first research cycle immediately; the scheduler handles later cycles.
+    try:
+        first_cycle = await run_agent_cycle()
+    except Exception as exc:
+        with db() as c:
+            c.execute("UPDATE agent_state SET last_error=? WHERE id=1", (str(exc)[:1000],))
+        raise HTTPException(502,"Agent ishga tushdi, lekin birinchi sikl xato berdi: "+str(exc)[:300])
+    return {"active":True,"cycle_seconds":CYCLE_SECONDS,"first_cycle":first_cycle}
 
 
 @app.post("/v1/agent/stop", dependencies=[Depends(require_auth)])
