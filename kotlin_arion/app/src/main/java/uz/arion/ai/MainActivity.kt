@@ -338,6 +338,8 @@ class MainActivity : Activity() {
         item("✦", "Agent rejimi") { toggleAgentMode() }
         item("🧠", "Mustaqil agent markazi") { openAgentCenter() }
         item("💰", "Daromad imkoniyatlari") { openIncomeOpportunities() }
+        item("🕶", "Maxfiy brend va biznes profili") { openPrivateBusinessProfile() }
+        item("🔐", "VPN sozlamalari") { openVpnSettings() }
         section("QO‘SHIMCHA IMKONIYATLAR")
         item("☁", "Ob-havo") { openWeather() }
         item("▤", "TXT fayl yaratish") { createTxtFile() }
@@ -434,12 +436,122 @@ class MainActivity : Activity() {
             v.setOnClickListener { click() }
             panel.addView(v, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
         }
+        card("🚀  Daromad biznesini rejalash", "Brend nomi ostida xizmat yoki raqamli mahsulot loyihasini boshlash") { startIncomeBusinessPlan() }
+        card("🕶  Maxfiy biznes profilini sozlash", "Ommaviy brend nomi va ish yo‘nalishini shifrlab saqlash") { openPrivateBusinessProfile() }
         card("＋  Yangi agent topshirig‘i", "Tadqiqot, xabar qoralamasi yoki buyurtma loyihasi") { showAgentTaskDialog() }
         card("📒  Daromad yoki xarajat kiritish", "Summalar telefonda saqlanadi") { showAgentLedgerDialog() }
         card("📊  Hisob-kitobni ko‘rish", "Jami daromad, xarajat va sof natija") { showAgentLedgerSummary() }
         card("📋  Joriy vazifalar", "Agent yadrosiga yuborilgan topshiriqlar") { showAgentTasks() }
         android.app.AlertDialog.Builder(this).setTitle("ARION — MUSTAQIL AGENT")
             .setView(ScrollView(this).apply { addView(panel) }).setNegativeButton("YOPISH", null).show()
+    }
+
+
+    // Ommaviy ishlarda brend taxallusidan foydalanish mumkin; KYC/soliq/bank talablarida
+    // platformaga haqiqiy ma'lumot berish shart. Profil Android Keystore bilan shifrlanadi.
+    private fun openPrivateBusinessProfile() {
+        val vault = ArionPrivateStore(this)
+        val saved = runCatching { JSONObject(vault.get("business_profile") ?: "{}") }.getOrElse { JSONObject() }
+        val alias = EditText(this).apply {
+            hint = "Ommaviy brend nomi (masalan: Sardor Digital)"
+            setText(saved.optString("brand_alias"))
+            setSingleLine(true)
+        }
+        val service = EditText(this).apply {
+            hint = "Qanday xizmat yoki mahsulot taklif qilasiz?"
+            setText(saved.optString("service"))
+            minLines = 2
+        }
+        val skills = EditText(this).apply {
+            hint = "Ko‘nikmalar (masalan: matn, tarjima, savdo, AI)"
+            setText(saved.optString("skills"))
+            minLines = 2
+        }
+        val hours = EditText(this).apply {
+            hint = "Kuniga ajratiladigan vaqt (soat)"
+            setText(saved.optString("hours_per_day"))
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+        }
+        val budget = EditText(this).apply {
+            hint = "Boshlang‘ich budjet (so‘m, 0 bo‘lsa bepul)"
+            setText(saved.optString("budget_uzs"))
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(4))
+            addView(TextView(this@MainActivity).apply {
+                text = "Taxallus — ommaviy brend uchun. To‘lov, shartnoma, KYC yoki soliq tekshiruvlarida qonun talab qilgan haqiqiy ma’lumotlardan foydalaning. Profil telefonda Android Keystore orqali shifrlanadi."
+                textSize = 12f
+                setTextColor(Color.DKGRAY)
+            })
+            addView(alias); addView(service); addView(skills); addView(hours); addView(budget)
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("ARION — MAXFIY BIZNES PROFILI")
+            .setView(ScrollView(this).apply { addView(box) })
+            .setPositiveButton("SHIFRLAB SAQLASH") { _, _ ->
+                val json = JSONObject()
+                    .put("brand_alias", alias.text.toString().trim())
+                    .put("service", service.text.toString().trim())
+                    .put("skills", skills.text.toString().trim())
+                    .put("hours_per_day", hours.text.toString().trim())
+                    .put("budget_uzs", budget.text.toString().trim())
+                try {
+                    vault.put("business_profile", json.toString())
+                    Toast.makeText(this, "Biznes profili shifrlab saqlandi", Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Shifrlash xatosi: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNeutralButton("PROFILNI O‘CHIRISH") { _, _ ->
+                vault.remove("business_profile")
+                Toast.makeText(this, "Biznes profili o‘chirildi", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("YOPISH", null)
+            .show()
+    }
+
+    private fun startIncomeBusinessPlan() {
+        val vault = ArionPrivateStore(this)
+        val profile = runCatching { JSONObject(vault.get("business_profile") ?: "{}") }.getOrElse { JSONObject() }
+        if (profile.optString("brand_alias").isBlank() || profile.optString("service").isBlank()) {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Avval biznes profilini to‘ldiring")
+                .setMessage("ARION sizning brend nomingiz va taklif qiladigan xizmatingizni bilishi kerak. Profil telefonda shifrlanib saqlanadi.")
+                .setPositiveButton("PROFILNI TO‘LDIRISH") { _, _ -> openPrivateBusinessProfile() }
+                .setNegativeButton("BEKOR", null)
+                .show()
+            return
+        }
+        val prompt = """
+            Sen ARION mustaqil biznes agentisan. Maqsad: foydalanuvchining ommaviy brendi ostida qonuniy, real va kichik xarajatli daromad loyihasini yo‘lga qo‘yish.
+            Brend nomi: ${profile.optString("brand_alias")}
+            Xizmat/mahsulot: ${profile.optString("service")}
+            Ko‘nikmalar: ${profile.optString("skills", "ko‘rsatilmagan")}
+            Kunlik vaqt: ${profile.optString("hours_per_day", "ko‘rsatilmagan")} soat
+            Boshlang‘ich budjet: ${profile.optString("budget_uzs", "0")} so‘m.
+            Internetdan real mijozlar, bozor talabi, platforma qoidalari, O‘zbekistondan foydalanish va to‘lov olish yo‘llarini tekshir.
+            Natijada: 1) eng yaxshi 2 biznes modeli; 2) birinchi sotiladigan aniq xizmat yoki raqamli mahsulot; 3) 7 kunlik bajariladigan reja; 4) mijoz topish uchun platformalar va to‘g‘ridan-to‘g‘ri manbalar; 5) tayyor reklama matni va mijozga yuboriladigan xabar qoralamasi; 6) xarajat, narx va ehtimoliy foyda taxminlarini alohida ko‘rsat; 7) pulni O‘zbekistonda qonuniy olish variantlari.
+            Faqat tekshirilgan manbalarga tayangan holda yoz. Daromadni kafolatlama. Brend taxallusidan ommaviy marketingda foydalanish mumkin, lekin shartnoma, KYC, bank va soliq talablarida haqiqiy ma’lumot ishlatilishi shart.
+            ARION hozircha akkaunt ochmaydi, mijozlarga xabar yubormaydi, buyurtma qabul qilmaydi, pul sarflamaydi, pul o‘tkazmaydi va savdo qilmaydi. Bular uchun alohida foydalanuvchi tasdig‘i talab qilinadi. Avval eng kam xarajatli, amalda boshlash mumkin bo‘lgan yo‘lni tanla.
+            Javobni sodda o‘zbek tilida, aniq havolalar va birinchi bajariladigan qadam bilan ber.
+        """.trimIndent()
+        addMessage("Siz", "ARION, ${profile.optString("brand_alias")} brendi uchun daromad loyihasini boshlash.")
+        status.text = "Biznes imkoniyatlari tekshirilmoqda…"
+        askBackend(prompt, true)
+    }
+
+    private fun openVpnSettings() {
+        try {
+            startActivity(Intent(android.provider.Settings.ACTION_VPN_SETTINGS))
+        } catch (_: Exception) {
+            try {
+                startActivity(Intent(android.provider.Settings.ACTION_SETTINGS))
+            } catch (_: Exception) {
+                Toast.makeText(this, "VPN sozlamalari ochilmadi", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     // ARION 3.5: internetdan qonuniy daromad yo‘nalishlarini real vaqtda tadqiq qilish.
