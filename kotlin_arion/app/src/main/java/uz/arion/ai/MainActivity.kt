@@ -1001,6 +1001,36 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
+    private class GroqApiException(val statusCode: Int, detail: String) : Exception(detail)
+
+    // Bitta modeldan ikki bosqichda foydalanamiz: avval qisqa qaror kartasi, keyin foydalanuvchiga javob.
+    // Bu yashirin fikr zanjiri emas; faqat vazifa, faktlar, noaniqlik va xavfsiz keyingi qadamlar.
+    private fun groqCompletion(apiKey: String, payload: JSONObject): JSONObject {
+        val conn = URL(groqUrl).openConnection() as HttpURLConnection
+        try {
+            conn.requestMethod = "POST"
+            conn.connectTimeout = 20000
+            conn.readTimeout = 90000
+            conn.doOutput = true
+            conn.setRequestProperty("Authorization", "Bearer " + apiKey)
+            conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            conn.setRequestProperty("Accept", "application/json")
+            conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+            val code = conn.responseCode
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val response = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            val json = JSONObject(response.ifBlank { "{}" })
+            if (code !in 200..299) {
+                val detail = json.optJSONObject("error")?.optString("message")
+                    ?: json.optString("message", response.take(500))
+                throw GroqApiException(code, detail)
+            }
+            return json
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     private fun askBackend(question: String, speakAnswer: Boolean) {
         val apiKey = readApiKey()
         if (apiKey.isNullOrBlank()) {
@@ -1008,59 +1038,85 @@ class MainActivity : Activity() {
             return
         }
         waitingForAnswer = true
-        status.text = "ARION javob tayyorlamoqda…"
-        thread {
+        status.text = "ARION vaziyatni tahlil qilmoqda…"
+        val activeAgentMode = agentMode
+        thread(name = "arion-cognitive-core") {
             var answer: String
             try {
-                val messages = org.json.JSONArray()
-                val baseSystemPrompt = "Siz ARION nomli aqlli yordamchisiz. Foydalanuvchiga tabiiy, ravon va tushunarli o‘zbek tilida, hurmat bilan javob bering. Imlo va tinish belgilariga qat’iy rioya qiling: o‘zbek lotin alifbosidagi o‘, g‘, sh, ch harflarini to‘g‘ri yozing; so‘zlarni buzib yoki talaffuzga qarab xato yozmang; gaplarni grammatik jihatdan to‘g‘ri tuzing. Javobni yuborishdan oldin imlo, kelishik qo‘shimchalari, vergul va nuqtalarni tekshiring. Qisqa va aniq yozing, keraksiz takrorlardan qoching. Ovozda o‘qishga qulay bo‘lishi uchun odatda sodda gaplar va oddiy ro‘yxatlardan foydalaning; foydalanuvchi so‘ramasa, jadval, murakkab Markdown, kod bloklari va ortiqcha belgilarni ishlatmang. Raqam, sana va qisqartmalarni imkon qadar aniq va tabiiy ifodalang. Har bir javobni yuborishdan oldin ichingizda ikkinchi marta tekshiring: so‘zlar haqiqiy va adabiy o‘zbek tilida ishlatiladimi, qo‘shimchalar to‘g‘rimi, gap mazmuni ravshanmi. O‘zingizdan yangi yoki buzilgan so‘z yasamang, talaffuzga qarab imlo yozmang, o‘zbekcha bo‘lmagan tovushma-tovush shakllarni ishlatmang. Masalan, “xushxahat” kabi noto‘g‘ri shaklni ishlatmang; gap mazmuniga mos bo‘lsa, to‘g‘ri so‘z “xushxabar” bo‘ladi. Agar so‘z yoki atamaning to‘g‘ri shakliga ishonchingiz komil bo‘lmasa, taxmin qilib yozish o‘rniga sodda va aniqroq iborani tanlang yoki foydalanuvchidan aniqlik so‘rang. O‘zbek lotin yozuvidagi o‘ va g‘ harflarini bir xil, izchil yozing. Javob matnining mazmunini o‘zgartirmang. Suhbatdoshingiz ismini o‘zi aytsa, shu suhbat davomida aynan o‘sha ism bilan murojaat qiling. Ism aytilmagan bo‘lsa, Sardor deb taxmin qilmang va ismni o‘zingiz to‘qimang; kerak bo‘lsa ismini so‘rang. Suhbatda boshqa odam o‘z ismini aytsa, murojaatni uning ismiga moslang. INSONDEK SUHBAT VA MASLAHAT QOIDALARI: suhbatni alohida savollar yig‘indisi deb emas, davom etayotgan muloqot deb tushuning; oldingi xabarlardagi maqsad, vaziyat, cheklov va aytilgan tafsilotlarni e’tiborga oling, foydalanuvchi aytgan narsani qayta-qayta so‘ramang. Tabiiy, samimiy, xotirjam va hurmatli ohangda gapiring; ortiqcha rasmiy, sovuq yoki robotga o‘xshash iboralardan qoching. Foydalanuvchining hissiyotini sezsangiz, avval qisqa hamdardlik bildiring, lekin sun’iy his-tuyg‘u yoki insoniy ongga egaman deb da’vo qilmang. Maslahat so‘ralganda vaziyatni tushuning, asosiy muammoni ajrating, amaliy 2–3 yo‘lni va ularning foyda-xatarlarini tushuntiring, so‘ng eng maqbul yo‘lni sabab bilan tavsiya qiling va birinchi bajariladigan qadamni ayting. Oddiy savolga ortiqcha uzun reja tuzmang. Muhim ma’lumot yetishmasa, taxminni haqiqat deb ko‘rsatmay, faqat eng zarur bitta aniqlashtiruvchi savol bering. Foydalanuvchi xato qilsa, shunchaki ma’qullamang: muloyimlik bilan nima uchun noto‘g‘ri yoki xavfli ekanini tushuntiring. Fakt, taxmin va shaxsiy tavsiyani bir-biridan ajrating; bilmagan narsangizni ochiq ayting, soxta manba, tajriba yoki bajarilgan ishni to‘qimang. Sog‘liq, huquq, moliya va xavfsizlikka oid masalalarda ehtiyotkor bo‘ling, xavfli holatlarda mutaxassisga murojaat qilishni ayting. Javob oxirida foydalanuvchini keraksiz savollar bilan qiynamang; keyingi qadam foydali bo‘lsa, bitta aniq taklif bering. Suhbat davomida foydalanuvchining aytgan maqsadlari va cheklovlariga mos, izchil javob bering."
+                val baseSystemPrompt = """Siz ARION nomli aqlli yordamchisiz. Foydalanuvchiga tabiiy, ravon va tushunarli o‘zbek tilida, hurmat bilan javob bering. Imlo va tinish belgilariga qat’iy rioya qiling: o‘zbek lotin alifbosidagi o‘, g‘, sh, ch harflarini to‘g‘ri yozing; so‘zlarni buzib yoki talaffuzga qarab xato yozmang; gaplarni grammatik jihatdan to‘g‘ri tuzing. Javobni yuborishdan oldin imlo, kelishik qo‘shimchalari, vergul va nuqtalarni tekshiring. Qisqa va aniq yozing, keraksiz takrorlardan qoching. Ovozda o‘qishga qulay bo‘lishi uchun odatda sodda gaplar va oddiy ro‘yxatlardan foydalaning; foydalanuvchi so‘ramasa, jadval, murakkab Markdown, kod bloklari va ortiqcha belgilarni ishlatmang. Raqam, sana va qisqartmalarni imkon qadar aniq va tabiiy ifodalang. Har bir javobni yuborishdan oldin imlo va mazmunni tekshiring. O‘zingizdan yangi yoki buzilgan so‘z yasamang. O‘zbek lotin yozuvidagi o‘ va g‘ harflarini izchil yozing. Suhbatdoshingiz ismini o‘zi aytsa, shu suhbat davomida aynan o‘sha ism bilan murojaat qiling; ism aytilmasa, ismni taxmin qilmang.
+INSONDEK SUHBAT VA MASLAHAT: suhbatni davom etayotgan muloqot deb tushuning; oldingi maqsad, vaziyat, cheklov va tafsilotlarni hisobga oling. Tabiiy, samimiy, xotirjam va hurmatli ohangda gapiring. Hissiyotlarni sezsangiz, qisqa hamdardlik bildiring, ammo insoniy ong yoki haqiqiy his-tuyg‘ularga egaman deb da’vo qilmang. Maslahatda muammoni aniqlang, 2–3 amaliy yo‘lni foyda-xatarlari bilan solishtiring, eng maqbulini sabab bilan tavsiya qiling va birinchi qadamni ayting. Oddiy savolga qisqa javob bering. Muhim ma’lumot yetishmasa, faqat eng zarur bitta savolni bering. Foydalanuvchi xato qilsa, muloyimlik bilan tushuntiring; ko‘r-ko‘rona ma’qullamang. Fakt, taxmin va tavsiyani ajrating; bilmagan narsani ochiq ayting, soxta manba yoki bajarilmagan ishni to‘qimang. Sog‘liq, huquq, moliya va xavfsizlikda ehtiyotkor bo‘ling."""
                 val memoryNotes = getSharedPreferences("arion_memory", Context.MODE_PRIVATE)
                     .getString("notes", "").orEmpty().take(3000)
                 val developmentPrefs = getSharedPreferences("arion_development", Context.MODE_PRIVATE)
                 val learningNotes = developmentPrefs.getString("learning_notes", "").orEmpty().take(3000)
                 val feedbackNotes = developmentPrefs.getString("feedback_notes", "").orEmpty().take(3000)
                 val savedContext = buildString {
-                    if (memoryNotes.isNotBlank()) append("\n\nFoydalanuvchi saqlagan shaxsiy eslatmalar (kontekst sifatida):\n").append(memoryNotes)
-                    if (learningNotes.isNotBlank()) append("\n\nARION uchun foydalanuvchi qo‘shgan bilim va qoidalar:\n").append(learningNotes)
-                    if (feedbackNotes.isNotBlank()) append("\n\nFoydalanuvchining avvalgi fikr va xatolik qaydlari; javob sifatini yaxshilashda hisobga ol:\n").append(feedbackNotes)
+                    if (memoryNotes.isNotBlank()) append("\n\nFoydalanuvchi saqlagan xotira:\n").append(memoryNotes)
+                    if (learningNotes.isNotBlank()) append("\n\nFoydalanuvchi o‘rgatgan bilim va qoidalar:\n").append(learningNotes)
+                    if (feedbackNotes.isNotBlank()) append("\n\nFoydalanuvchi fikrlari va tuzatishlar:\n").append(feedbackNotes)
                 }
-                messages.put(JSONObject().put("role", "system").put("content", baseSystemPrompt + savedContext))
-                synchronized(chatHistory) { chatHistory.takeLast(10).forEach { messages.put(it) } }
+                val agentInstructions = if (activeAgentMode) {
+                    "\n\nAGENT REJIMI: vazifani maqsad, bosqichlar, kerakli vositalar va tekshiruv mezonlariga ajrating. ARIONda amalda ulanmagan vosita yoki tashqi amalni bajardim deb aytmang. Tashqi, xavfli yoki qaytarib bo‘lmaydigan harakatdan oldin foydalanuvchining aniq roziligini oling. O‘zingiz bajara olmaydigan qadamlarni foydalanuvchiga aniq tushuntiring."
+                } else ""
+
+                val historySnapshot = synchronized(chatHistory) {
+                    chatHistory.takeLast(10).map { JSONObject(it.toString()) }
+                }
+
+                // 1-bosqich: vaziyatni ixcham va amaliy shaklda xaritalash.
+                val plannerMessages = org.json.JSONArray()
+                plannerMessages.put(JSONObject().put("role", "system").put(
+                    "content",
+                    """Siz ARIONning vaziyatni anglash va rejalashtirish modulisisiz. Foydalanuvchiga javob yozmang va batafsil ichki fikrlash zanjirini chiqarmang. Faqat qisqa operatsion qaror kartasini tuzing: foydalanuvchi maqsadi, suhbatdan ma’lum faktlar, taxminlar, yetishmayotgan muhim ma’lumot, javob strategiyasi, xavf yoki ruxsat talab qiladigan harakatlar. Oldingi suhbat bilan bog‘lang. Faktni taxmindan ajrating. Oddiy savolda ortiqcha murakkablashtirmang. 120 so‘zdan oshmang. O‘zbek tilida oddiy matn yoki ixcham JSON qaytaring."""
+                ))
+                historySnapshot.forEach { plannerMessages.put(it) }
+                plannerMessages.put(JSONObject().put("role", "user").put("content", question))
+                var decisionBrief = ""
+                try {
+                    val plannerPayload = JSONObject()
+                        .put("model", groqModel)
+                        .put("messages", plannerMessages)
+                        .put("temperature", 0.1)
+                        .put("max_completion_tokens", 300)
+                        .put("reasoning_effort", "none")
+                    decisionBrief = groqCompletion(apiKey, plannerPayload)
+                        .getJSONArray("choices").getJSONObject(0)
+                        .getJSONObject("message").optString("content", "").trim().take(1800)
+                } catch (_: Exception) {
+                    // Rejalashtirish bosqichi ishlamasa, asosiy javob baribir davom etadi.
+                    decisionBrief = ""
+                }
+
+                // 2-bosqich: qaror kartasi + xotira + suhbat tarixiga tayangan yakuniy javob.
+                val messages = org.json.JSONArray()
+                val cognitiveContext = buildString {
+                    append(baseSystemPrompt).append(savedContext).append(agentInstructions)
+                    if (decisionBrief.isNotBlank()) {
+                        append("\n\nARIONNING QAROR KARTASI (javobni tuzishda foydalan; foydalanuvchiga ichki karta yoki maxfiy tahlilni ko‘rsatma):\n")
+                        append(decisionBrief)
+                    }
+                }
+                messages.put(JSONObject().put("role", "system").put("content", cognitiveContext))
+                historySnapshot.forEach { messages.put(it) }
                 messages.put(JSONObject().put("role", "user").put("content", question))
-                // Kamroq tarix va token: javob tezroq kelishi uchun.
+
+                runOnUiThread { if (!isFinishing) status.text = "ARION xulosani tayyorlamoqda…" }
                 val payload = JSONObject().put("model", groqModel).put("messages", messages)
-                    .put("temperature", 0.3).put("max_completion_tokens", 1000)
+                    .put("temperature", 0.3).put("max_completion_tokens", 1200)
                     .put("reasoning_effort", "none")
-                val conn = URL(groqUrl).openConnection() as HttpURLConnection
-                conn.requestMethod = "POST"
-                conn.connectTimeout = 20000
-                conn.readTimeout = 90000
-                conn.doOutput = true
-                conn.setRequestProperty("Authorization", "Bearer " + apiKey)
-                conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                conn.setRequestProperty("Accept", "application/json")
-                conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-                val code = conn.responseCode
-                val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-                val response = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-                conn.disconnect()
-                val json = JSONObject(response.ifBlank { "{}" })
-                if (code in 200..299) {
-                    answer = json.getJSONArray("choices").getJSONObject(0)
-                        .getJSONObject("message").optString("content", "ARION bo‘sh javob oldi.")
-                    synchronized(chatHistory) {
-                        chatHistory.add(JSONObject().put("role", "user").put("content", question))
-                        chatHistory.add(JSONObject().put("role", "assistant").put("content", answer))
-                        while (chatHistory.size > 30) chatHistory.removeAt(0)
-                    }
-                } else {
-                    val detail = json.optJSONObject("error")?.optString("message")
-                        ?: json.optString("message", response.take(500))
-                    answer = when (code) {
-                        401 -> "Groq API kaliti noto‘g‘ri yoki bekor qilingan. Menyudan API kalitini yangilang."
-                        429 -> "Groq so‘rov limiti tugadi. Biroz kutib qayta urinib ko‘ring."
-                        else -> "Groq xatosi ($code): $detail"
-                    }
+                val json = groqCompletion(apiKey, payload)
+                answer = json.getJSONArray("choices").getJSONObject(0)
+                    .getJSONObject("message").optString("content", "ARION bo‘sh javob oldi.")
+                synchronized(chatHistory) {
+                    chatHistory.add(JSONObject().put("role", "user").put("content", question))
+                    chatHistory.add(JSONObject().put("role", "assistant").put("content", answer))
+                    while (chatHistory.size > 30) chatHistory.removeAt(0)
+                }
+            } catch (e: GroqApiException) {
+                answer = when (e.statusCode) {
+                    401 -> "Groq API kaliti noto‘g‘ri yoki bekor qilingan. Menyudan API kalitini yangilang."
+                    429 -> "Groq so‘rov limiti tugadi. Biroz kutib qayta urinib ko‘ring."
+                    else -> "Groq xatosi (${e.statusCode}): ${e.message ?: "noma’lum xato"}"
                 }
             } catch (e: Exception) {
                 answer = "Internet yoki Groq serveriga ulanish xatosi: " +
