@@ -56,10 +56,10 @@ object EdgeTtsClient {
                 opened.countDown()
                 val stamp = edgeTimestamp()
                 val config = "X-Timestamp:$stamp\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n" +
-                    "{\"context\":{\"synthesis\":{\"audio\":{\"metadataoptions\":{\"sentenceBoundaryEnabled\":\"false\",\"wordBoundaryEnabled\":\"false\"},\"outputFormat\":\"audio-24khz-96kbitrate-mono-mp3\"}}}}\r\n"
+                    "{\"context\":{\"synthesis\":{\"audio\":{\"metadataoptions\":{\"sentenceBoundaryEnabled\":\"false\",\"wordBoundaryEnabled\":\"false\"},\"outputFormat\":\"audio-24khz-48kbitrate-mono-mp3\"}}}}\r\n"
                 val safe = escapeXml(clean)
                 val ssml = "X-RequestId:$requestId\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${stamp}Z\r\nPath:ssml\r\n\r\n" +
-                    "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='uz-UZ'><voice name='$VOICE'><prosody rate='+3%' pitch='+0Hz' volume='+0%'>$safe</prosody></voice></speak>"
+                    "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='uz-UZ'><voice name='$VOICE'><prosody rate='+0%' pitch='+0Hz' volume='+0%'>$safe</prosody></voice></speak>"
                 if (!webSocket.send(config) || !webSocket.send(ssml)) {
                     failure.set(IllegalStateException("Edge TTS so‘rovi yuborilmadi"))
                     completed.countDown()
