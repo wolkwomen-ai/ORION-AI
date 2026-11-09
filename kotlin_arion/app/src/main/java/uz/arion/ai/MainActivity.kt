@@ -826,29 +826,27 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 1f + 0.025f * kotlin.math.sin(Math.toRadians(rotation.toDouble())).toFloat()
             val s = scale * pulse
 
-            if (!minimalMode) {
-                // Normal app icon keeps its metallic aura and orbital rings.
-                glowPaint.shader = android.graphics.RadialGradient(
-                    cx, cy, unit * 0.49f,
-                    intArrayOf(0x6644BFFF, 0x223A8FFF, Color.TRANSPARENT),
-                    floatArrayOf(0f, 0.62f, 1f), android.graphics.Shader.TileMode.CLAMP
-                )
-                canvas.drawCircle(cx, cy, unit * 0.49f, glowPaint)
+            // A belgisi atrofidagi ikkita orbital halqa barcha rejimlarda ko'rinadi.
+            glowPaint.shader = android.graphics.RadialGradient(
+                cx, cy, unit * 0.49f,
+                intArrayOf(0x6644BFFF, 0x223A8FFF, Color.TRANSPARENT),
+                floatArrayOf(0f, 0.62f, 1f), android.graphics.Shader.TileMode.CLAMP
+            )
+            canvas.drawCircle(cx, cy, unit * 0.49f, glowPaint)
 
-                val orbitRect = android.graphics.RectF(
-                    cx - unit * 0.47f, cy - unit * 0.19f,
-                    cx + unit * 0.47f, cy + unit * 0.19f
-                )
-                val orbitSave = canvas.save()
-                canvas.rotate(rotation, cx, cy)
-                ringPaint.strokeWidth = maxOf(1f, unit * 0.018f)
-                ringPaint.alpha = 125
-                canvas.drawOval(orbitRect, ringPaint)
-                canvas.rotate(58f, cx, cy)
-                ringPaint.alpha = 205
-                canvas.drawOval(orbitRect, ringPaint)
-                canvas.restoreToCount(orbitSave)
-            }
+            val orbitRect = android.graphics.RectF(
+                cx - unit * 0.47f, cy - unit * 0.19f,
+                cx + unit * 0.47f, cy + unit * 0.19f
+            )
+            val orbitSave = canvas.save()
+            canvas.rotate(rotation, cx, cy)
+            ringPaint.strokeWidth = maxOf(1f, unit * 0.018f)
+            ringPaint.alpha = 125
+            canvas.drawOval(orbitRect, ringPaint)
+            canvas.rotate(58f, cx, cy)
+            ringPaint.alpha = 205
+            canvas.drawOval(orbitRect, ringPaint)
+            canvas.restoreToCount(orbitSave)
 
             val markSave = canvas.save()
             canvas.translate(cx, cy)
@@ -924,10 +922,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
             canvas.restoreToCount(markSave)
 
-            if (!minimalMode) {
-                rotation = (rotation + 0.72f + lastRms.coerceIn(0f, 12f) * 0.035f) % 360f
-                postInvalidateDelayed(32)
-            }
+            // Orbital halqalar jonli ovoz rejimida ham uzluksiz aylanadi.
+            rotation = (rotation + 0.72f + lastRms.coerceIn(0f, 12f) * 0.035f) % 360f
+            postInvalidateDelayed(32)
         }
     }
 }
