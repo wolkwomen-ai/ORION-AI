@@ -923,7 +923,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                         player.release()
                         file.delete()
                     } else {
-                        edgePlayer?.runCatching { stop(); release() }
+                        edgePlayer?.let { old -> runCatching { old.stop(); old.release() } }
                         edgePlayer = player
                         status.text = "Madina gapiryapti…"
                         player.start()
