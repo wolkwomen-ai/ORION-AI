@@ -1108,12 +1108,12 @@ class MainActivity : Activity() {
         for (targetQuery in targetedQueries) {
             try {
                 val page = searchWebSingle(targetQuery)
-                val blocks = page.split(Regex("(?=\\\\d+\\\\. )"))
+                val blocks = page.split(Regex("(?=\\d+\\. )"))
                     .map { it.trim() }
                     .filter { it.contains("Manba: http") }
                     .take(3)
                 for (block in blocks) {
-                    val url = Regex("Manba: (https?://[^\\\\s]+)").find(block)?.groupValues?.get(1) ?: continue
+                    val url = Regex("Manba: (https?://[^\\s]+)").find(block)?.groupValues?.get(1) ?: continue
                     collected.putIfAbsent(url, block)
                 }
             } catch (e: Exception) {
@@ -1124,7 +1124,7 @@ class MainActivity : Activity() {
             throw IOException("Ish e'lonlari bo'yicha maqsadli qidiruv natija bermadi. ${errors.joinToString("; ").take(300)}")
         }
         return collected.values.take(15).mapIndexed { index, block ->
-            block.replaceFirst(Regex("^\\\\d+\\\\. "), "${index + 1}. ")
+            block.replaceFirst(Regex("^\\d+\\. "), "${index + 1}. ")
         }.joinToString("\\n\\n") +
             "\\n\\nESLATMA: Bu qidiruv natijalari e'lonning hali ochiqligini yoki O'zbekistondan ariza qabul qilinishini o'z-o'zidan tasdiqlamaydi. Har bir havolani alohida tekshiring."
     }
