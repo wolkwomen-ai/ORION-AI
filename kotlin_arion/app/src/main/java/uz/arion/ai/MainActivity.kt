@@ -34,6 +34,7 @@ import kotlin.math.abs
 
 class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var root: FrameLayout
+    private lateinit var page: LinearLayout
     private lateinit var chat: LinearLayout
     private lateinit var scroll: ScrollView
     private lateinit var input: EditText
@@ -82,7 +83,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
     private fun buildScreen() {
         root = FrameLayout(this).apply { setBackgroundColor(Color.WHITE) }
-        val page = LinearLayout(this).apply {
+        page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(4), dp(12), dp(8))
         }
@@ -676,6 +677,11 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private fun showVoicePanel() {
+        // Ovoz rejimida oddiy chat foni (header, yozishmalar va status) yashiriladi.
+        page.getChildAt(0)?.visibility = View.GONE
+        page.getChildAt(1)?.visibility = View.GONE
+        page.getChildAt(2)?.visibility = View.GONE
+
         // ChatGPT uslubidagi ixcham jonli rejim: faqat A belgisi va composer ichidagi X.
         plusButton.visibility = View.GONE
         micButton.visibility = View.GONE
@@ -732,6 +738,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         voicePanel?.let { root.removeView(it) }
         voicePanel = null
         orb = null
+        page.getChildAt(0)?.visibility = View.VISIBLE
+        page.getChildAt(1)?.visibility = View.VISIBLE
+        page.getChildAt(2)?.visibility = View.VISIBLE
         plusButton.visibility = View.VISIBLE
         micButton.visibility = View.VISIBLE
         sendButton.text = if (input.text.toString().isNotBlank()) "↑" else "≋"
