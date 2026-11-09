@@ -671,7 +671,7 @@ class MainActivity : Activity() {
             try {
                 val messages = org.json.JSONArray()
                 messages.put(JSONObject().put("role", "system").put("content",
-                    "Siz ARION nomli aqlli yordamchisiz. Foydalanuvchiga o‘zbek tilida, hurmat bilan va aniq javob bering. Suhbatdoshingiz ismini o‘zi aytsa, shu suhbat davomida aynan o‘sha ism bilan murojaat qiling. Ism aytilmagan bo‘lsa, Sardor deb taxmin qilmang va ismni o‘zingiz to‘qimang; kerak bo‘lsa ismini so‘rang. Suhbatda boshqa odam o‘z ismini aytsa, murojaatni uning ismiga moslang."))
+                    "Siz ARION nomli aqlli yordamchisiz. Foydalanuvchiga tabiiy, ravon va tushunarli o‘zbek tilida, hurmat bilan javob bering. Imlo va tinish belgilariga qat’iy rioya qiling: o‘zbek lotin alifbosidagi o‘, g‘, sh, ch harflarini to‘g‘ri yozing; so‘zlarni buzib yoki talaffuzga qarab xato yozmang; gaplarni grammatik jihatdan to‘g‘ri tuzing. Javobni yuborishdan oldin imlo, kelishik qo‘shimchalari, vergul va nuqtalarni tekshiring. Qisqa va aniq yozing, keraksiz takrorlardan qoching. Ovozda o‘qishga qulay bo‘lishi uchun odatda sodda gaplar va oddiy ro‘yxatlardan foydalaning; foydalanuvchi so‘ramasa, jadval, murakkab Markdown, kod bloklari va ortiqcha belgilarni ishlatmang. Raqam, sana va qisqartmalarni imkon qadar aniq va tabiiy ifodalang. Javob matnining mazmunini o‘zgartirmang. Suhbatdoshingiz ismini o‘zi aytsa, shu suhbat davomida aynan o‘sha ism bilan murojaat qiling. Ism aytilmagan bo‘lsa, Sardor deb taxmin qilmang va ismni o‘zingiz to‘qimang; kerak bo‘lsa ismini so‘rang. Suhbatda boshqa odam o‘z ismini aytsa, murojaatni uning ismiga moslang."))
                 synchronized(chatHistory) { chatHistory.takeLast(10).forEach { messages.put(it) } }
                 messages.put(JSONObject().put("role", "user").put("content", question))
                 // Kamroq tarix va token: javob tezroq kelishi uchun.
@@ -717,7 +717,7 @@ class MainActivity : Activity() {
                 waitingForAnswer = false
                 status.text = ""
                 addMessage("ARION", answer)
-                if (speakAnswer) speak(answer)
+                if (speakAnswer) speak(speechFriendlyText(answer))
                 else if (liveMode) resumeLiveListening()
             }
         }
@@ -1020,6 +1020,20 @@ class MainActivity : Activity() {
         }
     }
 
+    // TTS matnidan Markdown belgilarini olib tashlaymiz; ekrandagi javob o‘zgarmaydi.
+    private fun speechFriendlyText(text: String): String {
+        return text
+            .replace(Regex("\\\\[([^\\\\]]+)\\\\]\\\\([^)]+\\\\)"), "$1")
+            .replace(Regex("(?m)^\\\\s{0,3}#{1,6}\\\\s*"), "")
+            .replace(Regex("\\\\*\\\\*(.*?)\\\\*\\\\*"), "$1")
+            .replace(Regex("__(.*?)__"), "$1")
+            .replace(Regex("(?m)^\\\\s*[-*+]\\\\s+"), "")
+            .replace(Regex("(?m)^\\\\s*\\\\d+[.)]\\\\s+"), "")
+            .replace("`", "")
+            .replace(Regex("[ \\\\t]{2,}"), " ")
+            .replace(Regex("\\\\n{3,}"), "\\\\n\\\\n")
+            .trim()
+    }
     private fun speak(text: String) {
         status.text = "Madina ovozi tayyorlanmoqda…"
         thread(name = "arion-madina-tts") {
