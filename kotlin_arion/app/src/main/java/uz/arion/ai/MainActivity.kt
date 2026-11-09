@@ -101,12 +101,13 @@ class MainActivity : Activity() {
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(76)
         }
         val menu = actionText("☰", Color.WHITE, Color.rgb(35,35,35), 24) { openDrawer() }
         header.addView(menu, LinearLayout.LayoutParams(dp(48), dp(48)))
         val headerOrb = OrbView(this)
         orb = headerOrb
-        header.addView(headerOrb, LinearLayout.LayoutParams(dp(40), dp(40)))
+        header.addView(headerOrb, LinearLayout.LayoutParams(dp(68), dp(68)))
         val titleBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
         titleBox.addView(TextView(this).apply {
             text = "ARION"; textSize = 19f; setTextColor(Color.rgb(30,30,30)); gravity = Gravity.CENTER
