@@ -174,8 +174,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val hasText = !s.isNullOrBlank()
-                sendButton.text = if (hasText) "↑" else "≋"
-                sendButton.contentDescription = if (hasText) "Yuborish" else "Ovozli suhbat"
+                sendButton.text = if (liveMode) "×" else if (hasText) "↑" else "≋"
+                sendButton.contentDescription = if (liveMode) "Ovozli suhbatni yopish" else if (hasText) "Yuborish" else "Ovozli suhbat"
             }
             override fun afterTextChanged(s: android.text.Editable?) {}
         })
@@ -628,7 +628,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                     val phrase = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
                     if (phrase.isNotBlank()) {
                         if (liveMode) {
-                            addMessage("Siz", phrase)
+                            // Yakuniy tanilgan gap ham ovoz rejimida yozish maydonida ko'rinib turadi.
+                            input.setText(phrase)
+                            input.setSelection(input.text.length)
                             askBackend(phrase, true)
                         } else {
                             input.setText((input.text.toString() + " " + phrase).trim())
@@ -639,7 +641,18 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                         resumeLiveListening()
                     } else status.text = ""
                 }
-                override fun onPartialResults(partialResults: Bundle?) {}
+                override fun onPartialResults(partialResults: Bundle?) {
+                    if (liveMode && !waitingForAnswer) {
+                        val partial = partialResults
+                            ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                            ?.firstOrNull().orEmpty()
+                        if (partial.isNotBlank()) {
+                            // Gapirayotgan paytda matn tanilgan bo'laklar bilan yangilanadi.
+                            input.setText(partial)
+                            input.setSelection(input.text.length)
+                        }
+                    }
+                }
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
         }
@@ -744,7 +757,10 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         if (!liveMode || !ttsReady) { if (liveMode) resumeLiveListening(); return }
         tts?.speak(text.take(3500), TextToSpeech.QUEUE_FLUSH, null, "arion-answer")
         root.postDelayed({
-            if (liveMode && !waitingForAnswer) resumeLiveListening()
+            if (liveMode && !waitingForAnswer) {
+                input.setText("")
+                resumeLiveListening()
+            }
         }, (text.length.coerceAtMost(3500) * 65L).coerceIn(1800L, 18000L))
     }
 
