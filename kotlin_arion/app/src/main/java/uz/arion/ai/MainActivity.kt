@@ -30,7 +30,6 @@ import android.widget.*
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.Locale
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -984,7 +983,6 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         liveMode = false
         try { recognizer?.destroy() } catch (_: Exception) {}
-        tts?.stop()
         edgePlayer?.runCatching { stop(); release() }
         edgePlayer = null
 
