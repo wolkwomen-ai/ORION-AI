@@ -840,7 +840,8 @@ class MainActivity : Activity() {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setBackgroundColor(Color.rgb(8, 13, 25))
+            // Ovoz animatsiyasi ortidagi to'rtburchak fon olib tashlandi.
+            setBackgroundColor(Color.TRANSPARENT)
             setPadding(dp(18), dp(18), dp(18), dp(18))
         }
 
@@ -1102,12 +1103,8 @@ class MainActivity : Activity() {
             val s = scale * pulse
 
             // A belgisi atrofidagi ikkita orbital halqa barcha rejimlarda ko'rinadi.
-            glowPaint.shader = android.graphics.RadialGradient(
-                cx, cy, unit * 0.49f,
-                intArrayOf(0x6644BFFF, 0x223A8FFF, Color.TRANSPARENT),
-                floatArrayOf(0f, 0.62f, 1f), android.graphics.Shader.TileMode.CLAMP
-            )
-            canvas.drawCircle(cx, cy, unit * 0.49f, glowPaint)
+            // Logotip orqasidagi dumaloq fon/yorug'lik olib tashlandi.
+            // A belgisi va uning aylanuvchi orbital chiziqlari saqlanadi.
 
             val orbitRect = android.graphics.RectF(
                 cx - unit * 0.47f, cy - unit * 0.19f,
