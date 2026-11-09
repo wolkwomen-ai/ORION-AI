@@ -820,7 +820,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             val unit = minOf(width, height).toFloat()
             if (unit <= 0f) return
             val scale = unit / 100f
-            val pulse = 1f + 0.025f * kotlin.math.sin(Math.toRadians(rotation.toDouble())).toFloat()
+            // Live voice mode: A belgisi mutlaqo toza — puls, halqa va aylanuvchi effektlarsiz.
+            val pulse = if (minimalMode) 1f else
+                1f + 0.025f * kotlin.math.sin(Math.toRadians(rotation.toDouble())).toFloat()
             val s = scale * pulse
 
             if (!minimalMode) {
@@ -921,8 +923,10 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
             canvas.restoreToCount(markSave)
 
-            rotation = (rotation + 0.72f + lastRms.coerceIn(0f, 12f) * 0.035f) % 360f
-            postInvalidateDelayed(32)
+            if (!minimalMode) {
+                rotation = (rotation + 0.72f + lastRms.coerceIn(0f, 12f) * 0.035f) % 360f
+                postInvalidateDelayed(32)
+            }
         }
     }
 }
