@@ -11,7 +11,6 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.drawable.GradientDrawable
 import android.media.MediaPlayer
-import android.util.Base64
 import java.io.File
 import android.os.Bundle
 import android.speech.RecognitionListener
@@ -639,8 +638,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
                 if (liveMode) speak(fallbackText)
                 true
             }
-            player.prepareAsync()
             player.setOnPreparedListener { it.start() }
+            player.prepareAsync()
         } catch (_: Exception) {
             voicePlayer?.release()
             voicePlayer = null
@@ -851,6 +850,9 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         listening = false
         try { recognizer?.cancel() } catch (_: Exception) {}
         tts?.stop()
+        try { voicePlayer?.stop() } catch (_: Exception) {}
+        try { voicePlayer?.release() } catch (_: Exception) {}
+        voicePlayer = null
         voicePanel?.let { root.removeView(it) }
         voicePanel = null
         orb = null
