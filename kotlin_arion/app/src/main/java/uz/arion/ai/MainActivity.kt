@@ -1125,8 +1125,8 @@ class MainActivity : Activity() {
         }
         return collected.values.take(15).mapIndexed { index, block ->
             block.replaceFirst(Regex("^\\d+\\. "), "${index + 1}. ")
-        }.joinToString("\\n\\n") +
-            "\\n\\nESLATMA: Bu qidiruv natijalari e'lonning hali ochiqligini yoki O'zbekistondan ariza qabul qilinishini o'z-o'zidan tasdiqlamaydi. Har bir havolani alohida tekshiring."
+        }.joinToString("\n\n") +
+            "\n\nESLATMA: Bu qidiruv natijalari e'lonning hali ochiqligini yoki O'zbekistondan ariza qabul qilinishini o'z-o'zidan tasdiqlamaydi. Har bir havolani alohida tekshiring."
     }
 
     private fun searchWebSingle(query: String): String {
