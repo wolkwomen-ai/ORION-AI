@@ -678,8 +678,12 @@ class MainActivity : Activity() {
 
     private fun loadAgentLedgerOnce() {
         if (agentLedgerLoaded) return
-        val rows = try { org.json.JSONArray(getSharedPreferences("arion_agent", Context.MODE_PRIVATE).getString("ledger", "[]")) }
-            catch (_: Exception) { org.json.JSONArray() }
+        val vault = ArionPrivateStore(this)
+        val legacyPrefs = getSharedPreferences("arion_agent", Context.MODE_PRIVATE)
+        val encryptedRows = vault.get("financial_ledger")
+        val rows = try {
+            org.json.JSONArray(encryptedRows ?: legacyPrefs.getString("ledger", "[]"))
+        } catch (_: Exception) { org.json.JSONArray() }
         for (i in 0 until rows.length()) {
             val row = rows.optJSONObject(i) ?: continue
             runCatching {
@@ -690,33 +694,67 @@ class MainActivity : Activity() {
                 ))
             }
         }
+        // Eski ochiq saqlangan daftarni bir marta shifrlangan omborga ko‘chiramiz.
+        if (encryptedRows == null && rows.length() > 0) saveAgentLedgerEncrypted()
+        legacyPrefs.edit().remove("ledger").apply()
         agentLedgerLoaded = true
+    }
+
+    private fun saveAgentLedgerEncrypted() {
+        val rows = org.json.JSONArray()
+        for (entry in agentCore.getLedger()) {
+            rows.put(JSONObject()
+                .put("label", entry.label)
+                .put("amount", entry.amountMinor)
+                .put("currency", entry.currency)
+                .put("income", entry.isIncome)
+                .put("time", entry.timestampEpochMs))
+        }
+        ArionPrivateStore(this).put("financial_ledger", rows.toString())
     }
 
     private fun showAgentLedgerDialog() {
         loadAgentLedgerOnce()
-        val label = EditText(this).apply { hint = "Izoh (masalan: ish haqi, oziq-ovqat)" }
-        val amount = EditText(this).apply { hint = "Summa, so‘m"; inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL }
-        val kind = Spinner(this).apply {
-            adapter = android.widget.ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("Daromad", "Xarajat"))
+        val label = EditText(this).apply { hint = "Izoh (masalan: xizmat haqi, xarajat)" }
+        val amount = EditText(this).apply {
+            hint = "Summa"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
         }
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(8), dp(18), dp(4)); addView(label); addView(amount); addView(kind) }
-        android.app.AlertDialog.Builder(this).setTitle("MOLIYAVIY DAFTAR").setView(box)
-            .setPositiveButton("SAQLASH") { _, _ ->
-                val value = runCatching { java.math.BigDecimal(amount.text.toString().trim()).movePointRight(2).longValueExact() }.getOrNull()
+        val currency = Spinner(this).apply {
+            adapter = android.widget.ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+                listOf("UZS", "USD", "EUR", "RUB", "USDT"))
+        }
+        val kind = Spinner(this).apply {
+            adapter = android.widget.ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+                listOf("Daromad", "Xarajat"))
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(4))
+            addView(label); addView(amount); addView(currency); addView(kind)
+        }
+        android.app.AlertDialog.Builder(this).setTitle("MAXFIY MOLIYAVIY DAFTAR").setView(box)
+            .setPositiveButton("SHIFRLAB SAQLASH") { _, _ ->
+                val value = runCatching {
+                    java.math.BigDecimal(amount.text.toString().trim()).movePointRight(2).longValueExact()
+                }.getOrNull()
                 if (label.text.isNullOrBlank() || value == null || value <= 0L) {
                     Toast.makeText(this, "Izoh va to‘g‘ri summani kiriting", Toast.LENGTH_LONG).show()
                 } else {
-                    val income = kind.selectedItemPosition == 0
-                    val entry = AgentLedgerEntry(label = label.text.toString().trim(), amountMinor = value, currency = "UZS", isIncome = income)
+                    val entry = AgentLedgerEntry(
+                        label = label.text.toString().trim(),
+                        amountMinor = value,
+                        currency = currency.selectedItem.toString(),
+                        isIncome = kind.selectedItemPosition == 0
+                    )
                     agentCore.recordLedgerEntry(entry)
-                    val prefs = getSharedPreferences("arion_agent", Context.MODE_PRIVATE)
-                    val rows = try { org.json.JSONArray(prefs.getString("ledger", "[]")) } catch (_: Exception) { org.json.JSONArray() }
-                    rows.put(JSONObject().put("label", entry.label).put("amount", entry.amountMinor)
-                        .put("currency", entry.currency).put("income", entry.isIncome).put("time", entry.timestampEpochMs))
-                    prefs.edit().putString("ledger", rows.toString()).apply()
-                    Toast.makeText(this, "Hisobga saqlandi", Toast.LENGTH_SHORT).show()
-                    showAgentLedgerSummary()
+                    try {
+                        saveAgentLedgerEncrypted()
+                        Toast.makeText(this, "Moliyaviy yozuv Android Keystore bilan shifrlab saqlandi", Toast.LENGTH_LONG).show()
+                        showAgentLedgerSummary()
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "Shifrlab saqlash xatosi: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                    }
                 }
             }.setNegativeButton("BEKOR", null).show()
     }
@@ -724,14 +762,21 @@ class MainActivity : Activity() {
     private fun showAgentLedgerSummary() {
         loadAgentLedgerOnce()
         val entries = agentCore.getLedger()
-        val income = entries.filter { it.isIncome && it.currency == "UZS" }.sumOf { it.amountMinor }
-        val expense = entries.filter { !it.isIncome && it.currency == "UZS" }.sumOf { it.amountMinor }
-        val fmt = java.text.NumberFormat.getIntegerInstance(java.util.Locale("uz", "UZ"))
-        val recent = entries.takeLast(8).asReversed().joinToString("\n") {
-            (if (it.isIncome) "+ " else "− ") + fmt.format(it.amountMinor / 100.0) + " so‘m — " + it.label
+        val currencies = entries.map { it.currency.uppercase() }.distinct().sorted()
+        val fmt = java.text.NumberFormat.getNumberInstance(java.util.Locale("uz", "UZ")).apply {
+            maximumFractionDigits = 2
+            minimumFractionDigits = 0
         }
-        val body = "Daromad: ${fmt.format(income / 100.0)} so‘m\nXarajat: ${fmt.format(expense / 100.0)} so‘m\nSof natija: ${fmt.format((income-expense) / 100.0)} so‘m\n\nOxirgi yozuvlar:\n" + if (recent.isBlank()) "Hali yozuv yo‘q." else recent
-        android.app.AlertDialog.Builder(this).setTitle("ARION HISOB-KITOBI")
+        val sections = currencies.map { code ->
+            val income = entries.filter { it.isIncome && it.currency.equals(code, true) }.sumOf { it.amountMinor }
+            val expense = entries.filter { !it.isIncome && it.currency.equals(code, true) }.sumOf { it.amountMinor }
+            val recent = entries.filter { it.currency.equals(code, true) }.takeLast(5).asReversed().joinToString("\n") {
+                (if (it.isIncome) "+ " else "− ") + fmt.format(it.amountMinor / 100.0) + " " + code + " — " + it.label
+            }
+            "$code\nDaromad: ${fmt.format(income / 100.0)}\nXarajat: ${fmt.format(expense / 100.0)}\nSof natija: ${fmt.format((income - expense) / 100.0)}\n$recent"
+        }
+        val body = if (sections.isEmpty()) "Hali moliyaviy yozuv yo‘q." else sections.joinToString("\n\n")
+        android.app.AlertDialog.Builder(this).setTitle("SHIFRLANGAN MOLIYAVIY HISOB")
             .setMessage(body).setPositiveButton("YOPISH", null).show()
     }
 
