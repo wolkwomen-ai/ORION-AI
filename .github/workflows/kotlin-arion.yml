@@ -1,4 +1,4 @@
-name: ARION Kotlin Android APK — 3.3 Multi AI Fallback
+name: ARION Kotlin Android APK — 3.4 Independent Agent Core
 
 on:
   workflow_dispatch:
@@ -57,7 +57,7 @@ jobs:
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: ARION-3.3-MULTI-AI-FALLBACK-SIGNED-APK
+          name: ARION-3.4-INDEPENDENT-AGENT-SIGNED-APK
           path: kotlin_arion/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
