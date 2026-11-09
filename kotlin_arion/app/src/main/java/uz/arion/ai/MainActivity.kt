@@ -592,12 +592,12 @@ class MainActivity : Activity() {
             @Suppress("DEPRECATION")
             packageManager.getPackageInfo(packageName, 0).versionName ?: "noma’lum"
         } catch (_: Exception) { "noma’lum" }
-        val report = "Ilova versiyasi: $version\\n" +
-            "Groq API kaliti: " + (if (apiReady) "saqlangan ✓" else "kiritilmagan !") + "\\n" +
-            "Mikrofon ruxsati: " + (if (micReady) "berilgan ✓" else "berilmagan !") + "\\n" +
-            "Ovoz aniqlash xizmati: " + (if (speechReady) "mavjud ✓" else "topilmadi !") + "\\n" +
-            "Saqlangan bilimlar: $learningCount ta\\n" +
-            "Fikr va xatolar: $feedbackCount ta\\n\\n" +
+        val report = "Ilova versiyasi: $version\n" +
+            "Groq API kaliti: " + (if (apiReady) "saqlangan ✓" else "kiritilmagan !") + "\n" +
+            "Mikrofon ruxsati: " + (if (micReady) "berilgan ✓" else "berilmagan !") + "\n" +
+            "Ovoz aniqlash xizmati: " + (if (speechReady) "mavjud ✓" else "topilmadi !") + "\n" +
+            "Saqlangan bilimlar: $learningCount ta\n" +
+            "Fikr va xatolar: $feedbackCount ta\n\n" +
             "Eslatma: bu mahalliy tekshiruv. Groq serveriga haqiqiy so‘rov yuborib tekshirish alohida amalga oshiriladi."
         android.app.AlertDialog.Builder(this)
             .setTitle("ARION DIAGNOSTIKASI")
@@ -847,9 +847,9 @@ class MainActivity : Activity() {
                 val learningNotes = developmentPrefs.getString("learning_notes", "").orEmpty().take(3000)
                 val feedbackNotes = developmentPrefs.getString("feedback_notes", "").orEmpty().take(3000)
                 val savedContext = buildString {
-                    if (memoryNotes.isNotBlank()) append("\\n\\nFoydalanuvchi saqlagan shaxsiy eslatmalar (kontekst sifatida):\\n").append(memoryNotes)
-                    if (learningNotes.isNotBlank()) append("\\n\\nARION uchun foydalanuvchi qo‘shgan bilim va qoidalar:\\n").append(learningNotes)
-                    if (feedbackNotes.isNotBlank()) append("\\n\\nFoydalanuvchining avvalgi fikr va xatolik qaydlari; javob sifatini yaxshilashda hisobga ol:\\n").append(feedbackNotes)
+                    if (memoryNotes.isNotBlank()) append("\n\nFoydalanuvchi saqlagan shaxsiy eslatmalar (kontekst sifatida):\n").append(memoryNotes)
+                    if (learningNotes.isNotBlank()) append("\n\nARION uchun foydalanuvchi qo‘shgan bilim va qoidalar:\n").append(learningNotes)
+                    if (feedbackNotes.isNotBlank()) append("\n\nFoydalanuvchining avvalgi fikr va xatolik qaydlari; javob sifatini yaxshilashda hisobga ol:\n").append(feedbackNotes)
                 }
                 messages.put(JSONObject().put("role", "system").put("content", baseSystemPrompt + savedContext))
                 synchronized(chatHistory) { chatHistory.takeLast(10).forEach { messages.put(it) } }
