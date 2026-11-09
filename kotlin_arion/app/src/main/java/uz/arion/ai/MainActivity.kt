@@ -565,6 +565,7 @@ class MainActivity : Activity() {
         if (question.isEmpty() || waitingForAnswer) return
         input.setText("")
         hideKeyboard()
+        input.clearFocus()
         addMessage("Siz", question)
         val replyWithMadina = liveMode
         if (replyWithMadina) {
@@ -826,6 +827,7 @@ class MainActivity : Activity() {
         liveMode = true
         voicePaused = false
         hideKeyboard()
+        input.clearFocus()
         showVoicePanel()
         resumeLiveListening()
     }
@@ -897,6 +899,12 @@ class MainActivity : Activity() {
 
     private fun resumeLiveListening() {
         if (!liveMode || voicePaused || waitingForAnswer || listening || isFinishing) return
+        if (input.hasFocus()) {
+            micButton.text = "🎙"
+            micButton.contentDescription = "Ovozli tinglashni davom ettirish"
+            status.text = "Matn yozishingiz mumkin — tugatgach mikrofonni bosing"
+            return
+        }
         if (recognizer == null && !ensureRecognizer()) return
         status.text = "Sizni tinglayapman…"
         voicePaused = false
