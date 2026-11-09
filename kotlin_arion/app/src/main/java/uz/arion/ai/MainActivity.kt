@@ -107,9 +107,14 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         header.addView(memoryButton, LinearLayout.LayoutParams(dp(48), dp(48)))
         page.addView(header)
 
-        scroll = ScrollView(this).apply { isFillViewport = true; clipToPadding = false }
+        scroll = ScrollView(this).apply {
+            isFillViewport = true
+            clipToPadding = false
+            setBackgroundColor(Color.WHITE)
+        }
         chat = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.WHITE)
             setPadding(dp(2), dp(12), dp(2), dp(16))
         }
         scroll.addView(chat)
@@ -181,12 +186,18 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         root.addView(page, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
 
-        // Pastki yozish paneli telefon navigatsiya tugmalari ustiga tushmasin.
-        // Klaviatura ochilganda composer IME yuqorisiga ko‘tariladi.
+        // Klaviatura ochilganda butun pastki yozish paneli uning ustiga ko‘tariladi.
+        // Chat maydoni oq fonda qoladi; xabarlar klaviatura ortida berkinib ketmaydi.
+        var imeWasVisible = false
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            view.setPadding(0, bars.top, 0, maxOf(bars.bottom, ime.bottom))
+            val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
+            view.setPadding(0, bars.top, 0, if (imeVisible) ime.bottom else bars.bottom)
+            if (imeVisible && !imeWasVisible) {
+                scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
+            }
+            imeWasVisible = imeVisible
             insets
         }
         ViewCompat.requestApplyInsets(root)
