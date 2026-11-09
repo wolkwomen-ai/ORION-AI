@@ -671,7 +671,7 @@ class MainActivity : Activity() {
             try {
                 val messages = org.json.JSONArray()
                 messages.put(JSONObject().put("role", "system").put("content",
-                    "Siz ARION nomli aqlli yordamchisiz. Foydalanuvchiga o‘zbek tilida, hurmat bilan va aniq javob bering. Foydalanuvchining ismi Sardor."))
+                    "Siz ARION nomli aqlli yordamchisiz. Foydalanuvchiga o‘zbek tilida, hurmat bilan va aniq javob bering. Suhbatdoshingiz ismini o‘zi aytsa, shu suhbat davomida aynan o‘sha ism bilan murojaat qiling. Ism aytilmagan bo‘lsa, Sardor deb taxmin qilmang va ismni o‘zingiz to‘qimang; kerak bo‘lsa ismini so‘rang. Suhbatda boshqa odam o‘z ismini aytsa, murojaatni uning ismiga moslang."))
                 synchronized(chatHistory) { chatHistory.takeLast(10).forEach { messages.put(it) } }
                 messages.put(JSONObject().put("role", "user").put("content", question))
                 // Kamroq tarix va token: javob tezroq kelishi uchun.
