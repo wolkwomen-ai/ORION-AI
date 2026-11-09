@@ -694,19 +694,14 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             bottomMargin = dp(74)
         }
         voicePanel = voiceMark
+        voiceMark.translationY = -dp(76).toFloat()
         root.addView(voiceMark, markLp)
         voiceMark.animate()
             .alpha(1f)
             .scaleX(0.88f)
             .scaleY(0.88f)
             .translationY(0f)
-            .setDuration(420)
-            .setInterpolator(android.view.animation.DecelerateInterpolator())
-            .start()
-        voiceMark.translationY = -dp(76).toFloat()
-        voiceMark.animate()
-            .translationY(0f)
-            .setDuration(420)
+            .setDuration(480)
             .setInterpolator(android.view.animation.DecelerateInterpolator())
             .start()
     }
