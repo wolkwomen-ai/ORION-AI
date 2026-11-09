@@ -859,14 +859,14 @@ class MainActivity : Activity() {
             textSize = 24f
             letterSpacing = 0.18f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
+            setTextColor(Color.rgb(25, 35, 55))
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(-1, -2))
 
         panel.addView(TextView(this).apply {
             text = "Ovozli suhbat"
             textSize = 14f
-            setTextColor(Color.rgb(155, 190, 220))
+            setTextColor(Color.rgb(75, 95, 120))
             gravity = Gravity.CENTER
             setPadding(0, dp(6), 0, dp(18))
         }, LinearLayout.LayoutParams(-1, -2))
@@ -874,7 +874,7 @@ class MainActivity : Activity() {
         panel.addView(TextView(this).apply {
             text = "Gapiring — ARION sizni tinglayapti"
             textSize = 13f
-            setTextColor(Color.rgb(190, 210, 230))
+            setTextColor(Color.rgb(65, 80, 100))
             gravity = Gravity.CENTER
         }, LinearLayout.LayoutParams(-1, -2))
 
