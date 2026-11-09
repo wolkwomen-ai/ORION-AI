@@ -1,5 +1,5 @@
 # ============================================================
-# ORION AI ULTIMATE
+# ARION AI ULTIMATE
 # Pydroid 3 + Kivy + Groq + Sketchware
 # ============================================================
 
@@ -32,7 +32,8 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.popup import Popup
 from kivy.uix.filechooser import FileChooserIconView
-from kivy.graphics import Color, Ellipse, RoundedRectangle
+from kivy.uix.image import Image
+from kivy.graphics import Color, Ellipse, RoundedRectangle, Line, Rotate, PushMatrix, PopMatrix
 from kivy.core.clipboard import Clipboard
 from kivy.graphics.texture import Texture
 import math
@@ -75,7 +76,7 @@ last_answer = ""
 
 
 # ============================================================
-# 2. ORION SHAXSIYATI
+# 2. ARION SHAXSIYATI
 # ============================================================
 
 SYSTEM_PROMPT = """
@@ -109,13 +110,13 @@ QOIDALAR:
 MARKETING VA ARION MARKET QOIDALARI:
 
 Agar foydalanuvchi reklama, marketing, mahsulot tavsifi yoki ARION MARKET haqida so'rasa:
-- Mahsulot/xizmat, auditoriya va maqsadni aniqlashga harakat qil; noma'lum tafsilotlarni o'ylab topma.
+- Avval mahsulot/xizmat, auditoriya va maqsadni aniqlashga harakat qil; ma'lumot yetarli bo'lmasa, noma'lum tafsilotlarni o'ylab topma.
 - Narx, chegirma, yetkazib berish muddati, mavjudlik, kafolat, to'lov usullari, 24/7 xizmat yoki mijozlar fikrini foydalanuvchi bermagan bo'lsa, haqiqat sifatida yozma.
-- Reklama matnini aniq auditoriyaga mosla; umumiy va takroriy shiorlardan qoch.
+- Reklama matnini aniq auditoriyaga mosla; umumiy va bir-biriga o'xshash shiorlardan qoch.
 - Har bir variantda alohida g'oya va tabiiy o'zbekcha uslub bo'lsin.
-- Qisqa, tayyor ishlatishga yaroqli matn yoz; oxirida aniq murojaatga chaqiriq qo'sh.
-- Foydalanuvchi so'ragan miqdor va so'z chegarasiga rioya qil.
-- Soxta sharh, sun'iy tanqislik va kafolatlangan savdo va'dalarini yaratma.
+- Qisqa, tayyor ishlatishga yaroqli matn yoz; oxirida odobli va aniq murojaatga chaqiriq qo'sh.
+- Natijani ortiqcha izohlar bilan cho'zma. Foydalanuvchi so'ragan miqdor va so'z chegarasiga rioya qil.
+- Mahsulot haqida dalil bo'lmasa, foyda va xususiyatlarni neytral ifodala; soxta sharh, sun'iy tanqislik va kafolatlangan savdo va'dalarini yaratma.
 
 Sen ARION AI'san.
 """
@@ -512,7 +513,7 @@ def process_command(question):
 
 
 # ============================================================
-# 10. ORION AI MIYASI
+# 10. ARION AI MIYASI
 # ============================================================
 
 def ask_orion(question, image_path=None):
@@ -889,10 +890,10 @@ def start_server():
 
         thread.start()
 
-        write_log("ORION SERVER ISHLADI")
+        write_log("ARION SERVER ISHLADI")
 
         print(
-            "ORION SERVER:",
+            "ARION SERVER:",
             SERVER_HOST,
             SERVER_PORT
         )
@@ -930,18 +931,43 @@ class OrionApp(App):
         self.chat = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(10), padding=[dp(5),dp(8),dp(5),dp(8)])
         self.chat.bind(minimum_height=self.chat.setter("height"))
         holder = AnchorLayout(size_hint_y=None, height=dp(235))
-        orb = Widget(size_hint=(None,None), size=(dp(190),dp(190)))
-        # ARION shari: tepada tiniq moviy, o'rtada oq bulutlar,
-        # pastda och osmonrang. Tekis chetli dumaloq tekstura.
-        orb_texture = self.make_orb_texture(256)
-        with orb.canvas:
-            Color(1, 1, 1, 1)
-            orb_shape = Ellipse(pos=orb.pos, size=orb.size, texture=orb_texture)
-        orb.bind(
-            pos=lambda obj, value: setattr(orb_shape, "pos", value),
-            size=lambda obj, value: setattr(orb_shape, "size", value)
+        logo_path = os.path.join(BASE_DIR, "assets", "arion_icon.png")
+        logo = Image(
+            source=logo_path,
+            size_hint=(None, None),
+            size=(dp(166), dp(166)),
+            allow_stretch=True,
+            keep_ratio=True
         )
-        holder.add_widget(orb); self.chat.add_widget(holder)
+        orb = Widget(size_hint=(None, None), size=(dp(190), dp(190)))
+        with orb.canvas:
+            PushMatrix()
+            self.orbit_rotate = Rotate(angle=0, origin=orb.center)
+            Color(0.55, 0.82, 1.0, 0.92)
+            self.orbit_line = Line(
+                ellipse=(orb.center_x-dp(94), orb.center_y-dp(58), dp(188), dp(116)),
+                width=1.7
+            )
+            Color(0.88, 0.96, 1.0, 1)
+            self.orbit_dot = Ellipse(
+                pos=(orb.center_x+dp(94)-dp(5), orb.center_y-dp(5)),
+                size=(dp(10), dp(10))
+            )
+            PopMatrix()
+
+        def update_orbit(*_):
+            cx, cy = orb.center
+            self.orbit_rotate.origin = (cx, cy)
+            self.orbit_line.ellipse = (
+                cx-dp(94), cy-dp(58), dp(188), dp(116)
+            )
+            self.orbit_dot.pos = (cx+dp(94)-dp(5), cy-dp(5))
+
+        orb.bind(pos=update_orbit, size=update_orbit)
+        holder.add_widget(logo)
+        holder.add_widget(orb)
+        self.chat.add_widget(holder)
+        Clock.schedule_interval(self.animate_orbit, 1.0/30.0)
         self.chat.add_widget(Label(text="Salom! Men ARION. Sizga qanday yordam beray?", size_hint_y=None, height=dp(45), font_size="16sp", color=(0.18,0.22,0.28,1)))
         self.scroll.add_widget(self.chat); root.add_widget(self.scroll)
         shell = BoxLayout(size_hint_y=None, height=dp(64), padding=dp(5))
@@ -961,6 +987,10 @@ class OrionApp(App):
         shell.add_widget(composer); root.add_widget(shell)
         start_server()
         return root
+
+    def animate_orbit(self, dt):
+        if hasattr(self, "orbit_rotate"):
+            self.orbit_rotate.angle = (self.orbit_rotate.angle + dt * 32.0) % 360.0
 
     def make_orb_texture(self, size=256):
         """Bulutli moviy shar teksturasini Kivy ichida yaratadi."""
@@ -1065,7 +1095,7 @@ class OrionApp(App):
             height=dp(42)
         )
         info = Label(
-            text="Ovozli suhbat oynasi tayyor. Mikrofon orqali tinglash keyingi bosqichda ulanadi.",
+            text="ARION ovozli suhbat rejimi. Mikrofon orqali tinglash hozircha ulanmagan.",
             halign="center",
             valign="middle"
         )
@@ -1163,7 +1193,7 @@ class OrionApp(App):
 
         self.last_answer = answer
 
-        self.add_message("ORION", answer)
+        self.add_message("ARION", answer)
         row = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(2))
         for symbol, callback in [("▢",self.copy_answer),("👍",self.like_answer),("👎",self.dislike_answer),("🔊",self.play_voice),("↗",self.share_answer),("⋮",self.show_answer_menu)]:
             button = Button(text=symbol, font_size="18sp", background_normal="", background_color=(0,0,0,0), color=(0.25,0.30,0.36,1))
@@ -1374,7 +1404,7 @@ class OrionApp(App):
 # ============================================================
 
 # ============================================================
-# ORION AI — XAVFSIZ ISHGA TUSHIRISH
+# ARION AI — XAVFSIZ ISHGA TUSHIRISH
 # ============================================================
 
 if __name__ == "__main__":
@@ -1386,7 +1416,7 @@ if __name__ == "__main__":
 
     try:
 
-        write_log("ORION ISHGA TUSHMOQDA")
+        write_log("ARION ISHGA TUSHMOQDA")
 
         # Fayllarni tekshirish
         write_log("BASE DIR: " + BASE_DIR)
@@ -1409,7 +1439,7 @@ if __name__ == "__main__":
 
         OrionApp().run()
 
-        write_log("ORION YOPILDI")
+        write_log("ARION YOPILDI")
 
     except BaseException:
 
@@ -1427,7 +1457,7 @@ if __name__ == "__main__":
                 encoding="utf-8"
             ) as f:
 
-                f.write("\nORION ISHGA TUSHMADI\n")
+                f.write("\nARION ISHGA TUSHMADI\n")
                 f.write(error)
 
         except Exception:
