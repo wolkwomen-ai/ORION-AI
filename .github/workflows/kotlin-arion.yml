@@ -1,4 +1,4 @@
-name: ARION Kotlin Android APK — 1.9 Unified Chat
+name: ARION Kotlin Android APK — 1.9.1 Animated Voice Screen
 
 on:
   workflow_dispatch:
@@ -57,7 +57,7 @@ jobs:
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: ARION-1.9-UNIFIED-CHAT-SIGNED-APK
+          name: ARION-1.9.1-ANIMATED-VOICE-SIGNED-APK
           path: kotlin_arion/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
