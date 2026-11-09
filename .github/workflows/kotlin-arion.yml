@@ -1,4 +1,4 @@
-name: ARION Kotlin Android APK
+name: ARION Kotlin Android APK — 1.9 Unified Chat
 
 on:
   workflow_dispatch:
