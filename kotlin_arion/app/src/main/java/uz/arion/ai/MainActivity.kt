@@ -494,6 +494,18 @@ class MainActivity : Activity() {
             dialog.dismiss()
             showDevelopmentNoteDialog("FIKR VA XATOLAR", "feedback_notes", "Qaysi xato yoki kamchilikni tuzatish kerak?")
         }
+        actionCard("🛠  Yangi o‘zgarish taklif qilish", "ARIONni yaxshilash uchun taklif yoki tuzatish talabini kiriting.") {
+            dialog.dismiss()
+            showChangeRequestDialog()
+        }
+        actionCard("📋  Takliflarni boshqarish", "Har bir o‘zgarishni tasdiqlash yoki rad etish faqat sizning qo‘lingizda.") {
+            dialog.dismiss()
+            showChangeRequests()
+        }
+        actionCard("🔐  Boshqaruv va ruxsatlar", "Avtomatik kod o‘zgartirish va avtomatik APK o‘rnatish o‘chirilgan.") {
+            dialog.dismiss()
+            showChangeControlInfo()
+        }
         actionCard("🩺  Tizim diagnostikasi", "Ilovaning asosiy ruxsatlari va saqlangan rivojlanish qaydlarini tekshiradi.") {
             dialog.dismiss()
             showDevelopmentDiagnostics()
@@ -509,6 +521,163 @@ class MainActivity : Activity() {
             .setNegativeButton("YOPISH", null)
             .create()
         dialog.show()
+    }
+
+    private fun showChangeControlInfo() {
+        val message = "ARION o‘zgarishlarni taklif qilishi va qayd etishi mumkin.\n\n" +
+            "• Takliflar sizning roziligingizsiz tasdiqlanmaydi.\n" +
+            "• Tasdiqlash — taklifni ishlab chiqish uchun siz bergan ruxsat qaydi.\n" +
+            "• Ilova hozircha o‘z Kotlin kodini o‘zi tahrirlay olmaydi.\n" +
+            "• Kodni o‘zgartirish, sinash va yangi APK yig‘ish alohida ishlab chiqish jarayonida bajariladi.\n" +
+            "• APKni telefonga o‘rnatish qarori ham sizda qoladi.\n\n" +
+            "Xavfsizlik: avtomatik kod yozish, avtomatik yangilash va avtomatik o‘rnatish yoqilmagan."
+        android.app.AlertDialog.Builder(this)
+            .setTitle("SARDOR — ASOSIY BOSHQARUV")
+            .setMessage(message)
+            .setPositiveButton("TUSHUNDIM", null)
+            .show()
+    }
+
+    private fun showChangeRequestDialog() {
+        val titleInput = EditText(this).apply { hint = "Taklif nomi"; textSize = 15f }
+        val detailInput = EditText(this).apply {
+            hint = "Nimani o‘zgartirish kerakligini batafsil yozing"
+            minLines = 3
+            maxLines = 6
+            gravity = Gravity.TOP
+            textSize = 14f
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(4))
+            addView(titleInput)
+            addView(detailInput, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("YANGI O‘ZGARISH TAKLIFI")
+            .setView(box)
+            .setPositiveButton("TAKLIFNI SAQLASH") { _, _ ->
+                val title = titleInput.text.toString().trim()
+                val detail = detailInput.text.toString().trim()
+                if (title.isBlank() || detail.isBlank()) {
+                    Toast.makeText(this, "Taklif nomi va izohini kiriting", Toast.LENGTH_LONG).show()
+                } else {
+                    val prefs = getSharedPreferences("arion_development", Context.MODE_PRIVATE)
+                    val requests = try {
+                        org.json.JSONArray(prefs.getString("change_requests", "[]").orEmpty())
+                    } catch (_: Exception) { org.json.JSONArray() }
+                    requests.put(JSONObject()
+                        .put("id", System.currentTimeMillis().toString())
+                        .put("title", title)
+                        .put("detail", detail)
+                        .put("status", "KUTILMOQDA")
+                        .put("created_at", System.currentTimeMillis()))
+                    val trimmed = org.json.JSONArray()
+                    val start = (requests.length() - 30).coerceAtLeast(0)
+                    for (i in start until requests.length()) trimmed.put(requests.getJSONObject(i))
+                    prefs.edit().putString("change_requests", trimmed.toString()).apply()
+                    Toast.makeText(this, "Taklif saqlandi. Tasdiqlash sizning qo‘lingizda.", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton("BEKOR", null)
+            .show()
+    }
+
+    private fun showChangeRequests() {
+        val prefs = getSharedPreferences("arion_development", Context.MODE_PRIVATE)
+        val requests = try {
+            org.json.JSONArray(prefs.getString("change_requests", "[]").orEmpty())
+        } catch (_: Exception) { org.json.JSONArray() }
+        if (requests.length() == 0) {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("O‘ZGARISH TAKLIFLARI")
+                .setMessage("Hozircha taklif yo‘q. Avval yangi taklif kiriting.")
+                .setPositiveButton("YOPISH", null)
+                .show()
+            return
+        }
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+        }
+        for (i in requests.length() - 1 downTo 0) {
+            val item = requests.optJSONObject(i) ?: continue
+            val id = item.optString("id")
+            val title = item.optString("title", "Nomsiz taklif")
+            val detail = item.optString("detail")
+            val state = item.optString("status", "KUTILMOQDA")
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                background = rounded(Color.rgb(246, 248, 251), 12)
+            }
+            card.addView(TextView(this).apply {
+                text = title
+                textSize = 15f
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                setTextColor(Color.rgb(35, 45, 60))
+            })
+            card.addView(TextView(this).apply {
+                text = "$state\n$detail"
+                textSize = 13f
+                setTextColor(Color.DKGRAY)
+                setPadding(0, dp(4), 0, dp(8))
+            })
+            val buttons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val approve = Button(this).apply {
+                text = "TASDIQLASH"
+                isEnabled = state == "KUTILMOQDA"
+                setOnClickListener {
+                    android.app.AlertDialog.Builder(this@MainActivity)
+                        .setTitle("TASDIQLAYSIZMI?")
+                        .setMessage("Siz ushbu taklifni ishlab chiqish uchun ma’qullaysiz. Bu tugma ilova kodini o‘zi o‘zgartirmaydi.")
+                        .setPositiveButton("HA, RUXSAT BERAMAN") { _, _ ->
+                            setChangeRequestStatus(id, "TASDIQLANDI")
+                            showChangeRequests()
+                        }
+                        .setNegativeButton("ORTGA", null)
+                        .show()
+                }
+            }
+            val reject = Button(this).apply {
+                text = "RAD ETISH"
+                isEnabled = state == "KUTILMOQDA"
+                setOnClickListener {
+                    android.app.AlertDialog.Builder(this@MainActivity)
+                        .setTitle("TAKLIFNI RAD ETASIZMI?")
+                        .setPositiveButton("RAD ETISH") { _, _ ->
+                            setChangeRequestStatus(id, "RAD ETILDI")
+                            showChangeRequests()
+                        }
+                        .setNegativeButton("ORTGA", null)
+                        .show()
+                }
+            }
+            buttons.addView(approve, LinearLayout.LayoutParams(0, -2, 1f))
+            buttons.addView(reject, LinearLayout.LayoutParams(0, -2, 1f))
+            card.addView(buttons)
+            panel.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(9) })
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("TAKLIFLARNI BOSHQARISH")
+            .setView(ScrollView(this).apply { addView(panel) })
+            .setNegativeButton("YOPISH", null)
+            .show()
+    }
+
+    private fun setChangeRequestStatus(requestId: String, newStatus: String) {
+        val prefs = getSharedPreferences("arion_development", Context.MODE_PRIVATE)
+        val old = try {
+            org.json.JSONArray(prefs.getString("change_requests", "[]").orEmpty())
+        } catch (_: Exception) { org.json.JSONArray() }
+        val updated = org.json.JSONArray()
+        for (i in 0 until old.length()) {
+            val item = old.optJSONObject(i) ?: continue
+            if (item.optString("id") == requestId) item.put("status", newStatus)
+            updated.put(item)
+        }
+        prefs.edit().putString("change_requests", updated.toString()).apply()
+        Toast.makeText(this, "Qaror saqlandi: $newStatus", Toast.LENGTH_SHORT).show()
     }
 
     private fun sendDevelopmentTask(prompt: String) {
