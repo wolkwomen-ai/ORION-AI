@@ -700,25 +700,27 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         sendButton.contentDescription = "Ovozli suhbatni yopish"
         sendButton.setOnClickListener { closeVoiceMode() }
 
+        // Katta A belgisi yuqoriroqdan paydo bo'ladi, pastga tushib
+        // kichrayadi va yozish panelining bevosita tepasida joylashadi.
         val voiceMark = OrbView(this).apply {
             minimalMode = true
             alpha = 0f
-            scaleX = 1.25f
-            scaleY = 1.25f
+            scaleX = 1.30f
+            scaleY = 1.30f
         }
         orb = voiceMark
         val markLp = FrameLayout.LayoutParams(dp(124), dp(124), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
             bottomMargin = dp(74)
         }
         voicePanel = voiceMark
-        voiceMark.translationY = -dp(76).toFloat()
+        voiceMark.translationY = -dp(92).toFloat()
         root.addView(voiceMark, markLp)
         voiceMark.animate()
             .alpha(1f)
-            .scaleX(0.88f)
-            .scaleY(0.88f)
-            .translationY(0f)
-            .setDuration(480)
+            .scaleX(0.72f)
+            .scaleY(0.72f)
+            .translationY(dp(12).toFloat())
+            .setDuration(650)
             .setInterpolator(android.view.animation.DecelerateInterpolator())
             .start()
     }
