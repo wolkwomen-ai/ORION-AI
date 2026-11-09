@@ -575,7 +575,7 @@ class MainActivity : Activity() {
             listening = false
             try { recognizer?.cancel() } catch (_: Exception) {}
         }
-        askBackend(question, replyWithMadina)
+        askBackend(question, true)
     }
 
     private fun hideKeyboard() {
@@ -716,7 +716,7 @@ class MainActivity : Activity() {
                 waitingForAnswer = false
                 status.text = ""
                 addMessage("ARION", answer)
-                if (speakAnswer && liveMode) speak(answer)
+                if (speakAnswer) speak(answer)
                 else if (liveMode) resumeLiveListening()
             }
         }
@@ -1020,7 +1020,6 @@ class MainActivity : Activity() {
     }
 
     private fun speak(text: String) {
-        if (!liveMode) return
         status.text = "Madina ovozi tayyorlanmoqda…"
         thread(name = "arion-madina-tts") {
             try {
@@ -1042,15 +1041,19 @@ class MainActivity : Activity() {
                     failed.release()
                     if (edgePlayer === failed) edgePlayer = null
                     file.delete()
-                    if (liveMode) runOnUiThread {
-                        status.text = "Madina ovozi ishlamadi. Qayta urinib ko‘ring."
-                        if (!waitingForAnswer) resumeLiveListening()
+                    runOnUiThread {
+                        if (liveMode) {
+                            status.text = "Madina ovozi ishlamadi. Qayta urinib ko‘ring."
+                            if (!waitingForAnswer) resumeLiveListening()
+                        } else {
+                            status.text = "Madina ovozi ishlamadi. Internetni tekshiring."
+                        }
                     }
                     true
                 }
                 player.prepare()
                 runOnUiThread {
-                    if (!liveMode || isFinishing) {
+                    if (isFinishing) {
                         player.release()
                         file.delete()
                     } else {
@@ -1065,6 +1068,8 @@ class MainActivity : Activity() {
                     if (liveMode) {
                         status.text = "Madina ovoziga ulanib bo‘lmadi. Internetni tekshiring."
                         if (!waitingForAnswer) resumeLiveListening()
+                    } else {
+                        status.text = "Madina ovoziga ulanib bo‘lmadi. Internetni tekshiring."
                     }
                 }
             }
