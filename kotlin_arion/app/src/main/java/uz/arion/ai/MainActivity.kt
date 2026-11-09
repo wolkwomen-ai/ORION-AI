@@ -15,6 +15,10 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import android.media.MediaPlayer
+import java.io.File
+import java.io.FileOutputStream
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -54,6 +58,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var recognizer: SpeechRecognizer? = null
     private var tts: TextToSpeech? = null
     private var ttsReady = false
+    private var edgePlayer: MediaPlayer? = null
     private var listening = false
     private var liveMode = false
     private var voicePanel: View? = null
@@ -890,13 +895,67 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private fun speak(text: String) {
-        if (!liveMode || !ttsReady) { if (liveMode) resumeLiveListening(); return }
-        tts?.speak(text.take(3500), TextToSpeech.QUEUE_FLUSH, null, "arion-answer")
-        root.postDelayed({
-            if (liveMode && !waitingForAnswer) {
-                resumeLiveListening()
+        if (!liveMode) return
+        status.text = "Madina ovozi tayyorlanmoqda…"
+        thread(name = "arion-madina-tts") {
+            try {
+                val audio = EdgeTtsClient.synthesize(text)
+                val file = File(cacheDir, "arion_madina_once.mp3")
+                FileOutputStream(file).use { it.write(audio) }
+                val player = MediaPlayer()
+                player.setDataSource(file.absolutePath)
+                player.setOnCompletionListener { finished ->
+                    finished.release()
+                    if (edgePlayer === finished) edgePlayer = null
+                    file.delete()
+                    if (liveMode && !waitingForAnswer) resumeLiveListening()
+                }
+                player.setOnErrorListener { failed, _, _ ->
+                    failed.release()
+                    if (edgePlayer === failed) edgePlayer = null
+                    file.delete()
+                    if (liveMode) runOnUiThread { speakWithPhoneVoice(text) }
+                    true
+                }
+                player.prepare()
+                runOnUiThread {
+                    if (!liveMode || isFinishing) {
+                        player.release()
+                        file.delete()
+                    } else {
+                        edgePlayer?.runCatching { stop(); release() }
+                        edgePlayer = player
+                        status.text = "Madina gapiryapti…"
+                        player.start()
+                    }
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    if (liveMode) {
+                        status.text = "Madina ovozi ulanmayapti — telefon ovozi ishlatilmoqda"
+                        speakWithPhoneVoice(text)
+                    }
+                }
             }
-        }, (text.length.coerceAtMost(3500) * 65L).coerceIn(1800L, 18000L))
+        }
+    }
+
+    private fun speakWithPhoneVoice(text: String) {
+        if (!liveMode || !ttsReady) {
+            if (liveMode) resumeLiveListening()
+            return
+        }
+        tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {}
+            override fun onDone(utteranceId: String?) {
+                root.post { if (liveMode && !waitingForAnswer) resumeLiveListening() }
+            }
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) {
+                root.post { if (liveMode && !waitingForAnswer) resumeLiveListening() }
+            }
+        })
+        tts?.speak(text.take(3500), TextToSpeech.QUEUE_FLUSH, null, "arion-phone-fallback")
     }
 
     private fun closeVoiceMode() {
@@ -905,6 +964,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         listening = false
         try { recognizer?.cancel() } catch (_: Exception) {}
         tts?.stop()
+        edgePlayer?.runCatching { stop(); release() }
+        edgePlayer = null
 
         voicePanel?.let { root.removeView(it) }
         voicePanel = null
@@ -955,6 +1016,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         liveMode = false
         try { recognizer?.destroy() } catch (_: Exception) {}
         tts?.stop()
+        edgePlayer?.runCatching { stop(); release() }
+        edgePlayer = null
         tts?.shutdown()
 
         super.onDestroy()
