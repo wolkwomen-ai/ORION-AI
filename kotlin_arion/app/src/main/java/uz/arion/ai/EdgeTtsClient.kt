@@ -131,7 +131,7 @@ object EdgeTtsClient {
             when (c) {
                 '&' -> append("&amp;")
                 '<' -> append("&lt;")
-                '>' -> append("&gt;')
+                '>' -> append("&gt;")
                 else -> if (c.code !in 0..8 && c.code !in 11..12 && c.code !in 14..31) append(c) else append(' ')
             }
         }
