@@ -1,10 +1,5 @@
 package uz.arion.ai
 
-import com.github.lonepheasantwarrior.talkify.service.provider.EdgeToken.SHA256_ADJUSTMENT
-import com.github.lonepheasantwarrior.talkify.service.provider.EdgeToken.SHA256_INITIAL
-import com.github.lonepheasantwarrior.talkify.service.provider.EdgeToken.SHA256_SCHEDULE
-import com.github.lonepheasantwarrior.talkify.service.provider.EdgeToken.SHA256_STATE
-import com.github.lonepheasantwarrior.talkify.service.provider.EdgeToken.sha256Init
 import java.util.Locale
 import kotlin.math.floor
 
