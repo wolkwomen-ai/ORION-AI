@@ -1089,7 +1089,47 @@ class MainActivity : Activity() {
 
     // Internet qidiruvi: DuckDuckGo HTML va Lite sahifalarini navbat bilan tekshiradi.
     // Qidiruv sahifasining HTML tuzilishi o‘zgarsa ham bir nechta selector bilan natija ajratadi.
+    // Daromad topshiriqlarida uzun matnni bitta qidiruvga yubormaymiz:
+    // har bir ish platformasi va masofaviy ish manbasi alohida tekshiriladi.
     private fun searchWeb(query: String): String {
+        val normalized = query.lowercase()
+        val incomeResearch = listOf("daromad", "daromad top", "vakansiya", "freelance", "ish e'lon").any { normalized.contains(it) }
+        if (!incomeResearch) return searchWebSingle(query)
+
+        val targetedQueries = listOf(
+            "site:upwork.com/freelance-jobs remote data entry virtual assistant worldwide",
+            "site:upwork.com/jobs Uzbekistan remote freelance",
+            "site:freelancer.com/projects remote data entry virtual assistant",
+            "site:remoteok.com/remote-jobs customer support data entry worldwide",
+            "site:weworkremotely.com/remote-jobs customer support writing"
+        )
+        val collected = linkedMapOf<String, String>()
+        val errors = mutableListOf<String>()
+        for (targetQuery in targetedQueries) {
+            try {
+                val page = searchWebSingle(targetQuery)
+                val blocks = page.split(Regex("(?=\\\\d+\\\\. )"))
+                    .map { it.trim() }
+                    .filter { it.contains("Manba: http") }
+                    .take(3)
+                for (block in blocks) {
+                    val url = Regex("Manba: (https?://[^\\\\s]+)").find(block)?.groupValues?.get(1) ?: continue
+                    collected.putIfAbsent(url, block)
+                }
+            } catch (e: Exception) {
+                errors.add("$targetQuery: ${e.localizedMessage ?: e.javaClass.simpleName}")
+            }
+        }
+        if (collected.isEmpty()) {
+            throw IOException("Ish e'lonlari bo'yicha maqsadli qidiruv natija bermadi. ${errors.joinToString("; ").take(300)}")
+        }
+        return collected.values.take(15).mapIndexed { index, block ->
+            block.replaceFirst(Regex("^\\\\d+\\\\. "), "${index + 1}. ")
+        }.joinToString("\\n\\n") +
+            "\\n\\nESLATMA: Bu qidiruv natijalari e'lonning hali ochiqligini yoki O'zbekistondan ariza qabul qilinishini o'z-o'zidan tasdiqlamaydi. Har bir havolani alohida tekshiring."
+    }
+
+    private fun searchWebSingle(query: String): String {
         val cleanQuery = query.replace(Regex("\\s+"), " ").trim().take(450)
         if (cleanQuery.isBlank()) throw IOException("Qidiruv so‘rovi bo‘sh.")
         val encoded = URLEncoder.encode(cleanQuery, "UTF-8")
