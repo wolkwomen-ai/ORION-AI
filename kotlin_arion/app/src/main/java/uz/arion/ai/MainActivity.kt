@@ -73,6 +73,8 @@ class MainActivity : Activity() {
     private val chatHistory = mutableListOf<JSONObject>()
     private val groqModel = "qwen/qwen3.8-27b"
     private val groqUrl = "https://api.groq.com/openai/v1/chat/completions"
+    private val openRouterUrl = "https://openrouter.ai/api/v1/chat/completions"
+    private val openRouterFreeModel = "openrouter/free"
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun rounded(color: Int, radius: Int): GradientDrawable =
@@ -1079,6 +1081,67 @@ class MainActivity : Activity() {
         } catch (_: Exception) { null }
     }
 
+    private fun saveOpenRouterKey(value: String) {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, keystoreKey())
+        val encrypted = cipher.doFinal(value.trim().toByteArray(Charsets.UTF_8))
+        getSharedPreferences("arion_secure", Context.MODE_PRIVATE).edit()
+            .putString("openrouter_iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+            .putString("openrouter_key", Base64.encodeToString(encrypted, Base64.NO_WRAP)).apply()
+    }
+
+    private fun readOpenRouterKey(): String? {
+        return try {
+            val prefs = getSharedPreferences("arion_secure", Context.MODE_PRIVATE)
+            val ivText = prefs.getString("openrouter_iv", null)
+            val keyText = prefs.getString("openrouter_key", null)
+            if (ivText.isNullOrBlank() || keyText.isNullOrBlank()) return null
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, keystoreKey(),
+                GCMParameterSpec(128, Base64.decode(ivText, Base64.NO_WRAP)))
+            String(cipher.doFinal(Base64.decode(keyText, Base64.NO_WRAP)), Charsets.UTF_8)
+                .takeIf { it.isNotBlank() }
+        } catch (_: Exception) { null }
+    }
+
+    private fun showOpenRouterKeyDialog(onSaved: (() -> Unit)? = null) {
+        val field = EditText(this).apply {
+            hint = "sk-or-v1-..."
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(4))
+            addView(TextView(this@MainActivity).apply {
+                text = "Groq limiti tugaganda zaxira AI ishlashi uchun OpenRouter kalitini kiriting. Bepul model tanlanadi, lekin bepul xizmatlarda ham so‘rov chegaralari bo‘lishi mumkin. Kalit telefonda shifrlanib saqlanadi."
+                textSize = 13f
+                setTextColor(Color.DKGRAY)
+            })
+            addView(field)
+        }
+        val dialog = android.app.AlertDialog.Builder(this).setTitle("ARION — zaxira AI kaliti")
+            .setView(box).setPositiveButton("SAQLASH", null).setNegativeButton("KEYINROQ", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val value = field.text.toString().trim()
+                if (!value.startsWith("sk-or-") || value.length < 20) {
+                    field.error = "OpenRouter kalitini to‘liq kiriting"
+                    return@setOnClickListener
+                }
+                try {
+                    saveOpenRouterKey(value)
+                    dialog.dismiss()
+                    Toast.makeText(this, "Zaxira AI kaliti shifrlab saqlandi", Toast.LENGTH_SHORT).show()
+                    onSaved?.invoke()
+                } catch (e: Exception) {
+                    field.error = "Saqlash xatosi: " + (e.localizedMessage ?: "noma'lum")
+                }
+            }
+        }
+        dialog.show()
+    }
+
     private fun showApiKeyDialog(onSaved: (() -> Unit)? = null) {
         val field = EditText(this).apply {
             hint = "gsk_..."
@@ -1147,6 +1210,46 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun openRouterCompletion(apiKey: String, payload: JSONObject): JSONObject {
+        val conn = URL(openRouterUrl).openConnection() as HttpURLConnection
+        try {
+            conn.requestMethod = "POST"
+            conn.connectTimeout = 20000
+            conn.readTimeout = 90000
+            conn.doOutput = true
+            conn.setRequestProperty("Authorization", "Bearer " + apiKey)
+            conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("HTTP-Referer", "https://github.com/wolkwomen-ai/ORION-AI")
+            conn.setRequestProperty("X-Title", "ARION AI")
+            conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+            val code = conn.responseCode
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val response = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            val json = JSONObject(response.ifBlank { "{}" })
+            if (code !in 200..299) {
+                val detail = json.optJSONObject("error")?.optString("message")
+                    ?: json.optString("message", response.take(500))
+                throw GroqApiException(code, "OpenRouter: " + detail)
+            }
+            return json
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    // Groq cheklov yoki server xatosi qaytarsa, foydalanuvchi oldindan saqlagan OpenRouter zaxirasiga o‘tamiz.
+    private fun aiCompletion(groqKey: String, payload: JSONObject): JSONObject {
+        try {
+            return groqCompletion(groqKey, payload)
+        } catch (e: GroqApiException) {
+            if (e.statusCode !in listOf(408, 429, 500, 502, 503, 504)) throw e
+            val backupKey = readOpenRouterKey() ?: throw e
+            val backupPayload = JSONObject(payload.toString()).put("model", openRouterFreeModel)
+            return openRouterCompletion(backupKey, backupPayload)
+        }
+    }
+
     private fun askBackend(question: String, speakAnswer: Boolean) {
         if (handleDeviceCommand(question)) return
         val apiKey = readApiKey()
@@ -1159,6 +1262,7 @@ class MainActivity : Activity() {
         val activeAgentMode = agentMode
         thread(name = "arion-cognitive-core") {
             var answer: String
+            var needsOpenRouterKey = false
             try {
                 val webResearch = if (shouldSearchWeb(question, activeAgentMode)) {
                     runOnUiThread { if (!isFinishing) status.text = "Internetdan manbalar qidirilmoqda…" }
@@ -1208,7 +1312,7 @@ INSONDEK SUHBAT VA MASLAHAT: suhbatni davom etayotgan muloqot deb tushuning; old
                         .put("temperature", 0.1)
                         .put("max_completion_tokens", 300)
                         .put("reasoning_effort", "none")
-                    decisionBrief = groqCompletion(apiKey, plannerPayload)
+                    decisionBrief = aiCompletion(apiKey, plannerPayload)
                         .getJSONArray("choices").getJSONObject(0)
                         .getJSONObject("message").optString("content", "").trim().take(1800)
                 } catch (_: Exception) {
@@ -1238,7 +1342,7 @@ INSONDEK SUHBAT VA MASLAHAT: suhbatni davom etayotgan muloqot deb tushuning; old
                 val payload = JSONObject().put("model", groqModel).put("messages", messages)
                     .put("temperature", 0.3).put("max_completion_tokens", 1200)
                     .put("reasoning_effort", "none")
-                val json = groqCompletion(apiKey, payload)
+                val json = aiCompletion(apiKey, payload)
                 answer = json.getJSONArray("choices").getJSONObject(0)
                     .getJSONObject("message").optString("content", "ARION bo‘sh javob oldi.")
                 synchronized(chatHistory) {
@@ -1249,7 +1353,7 @@ INSONDEK SUHBAT VA MASLAHAT: suhbatni davom etayotgan muloqot deb tushuning; old
             } catch (e: GroqApiException) {
                 answer = when (e.statusCode) {
                     401 -> "Groq API kaliti noto‘g‘ri yoki bekor qilingan. Menyudan API kalitini yangilang."
-                    429 -> "Groq so‘rov limiti tugadi. Biroz kutib qayta urinib ko‘ring."
+                    429 -> { needsOpenRouterKey = readOpenRouterKey().isNullOrBlank(); "Groq so‘rov limiti tugadi. Zaxira AI sozlamasini tekshiring." }
                     else -> "Groq xatosi (${e.statusCode}): ${e.message ?: "noma’lum xato"}"
                 }
             } catch (e: Exception) {
@@ -1260,6 +1364,7 @@ INSONDEK SUHBAT VA MASLAHAT: suhbatni davom etayotgan muloqot deb tushuning; old
                 waitingForAnswer = false
                 status.text = ""
                 addMessage("ARION", answer)
+                if (needsOpenRouterKey) showOpenRouterKeyDialog { askBackend(question, speakAnswer) }
                 if (speakAnswer) speak(speechFriendlyText(answer))
                 else if (liveMode) resumeLiveListening()
             }
