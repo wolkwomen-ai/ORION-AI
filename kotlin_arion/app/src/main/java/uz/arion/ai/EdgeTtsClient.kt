@@ -29,6 +29,22 @@ object EdgeTtsClient {
         .build()
 
     fun synthesize(text: String): ByteArray {
+        var lastError: Exception? = null
+        repeat(2) { attempt ->
+            try {
+                return synthesizeOnce(text)
+            } catch (error: Exception) {
+                lastError = error
+                if (attempt == 0) Thread.sleep(900)
+            }
+        }
+        throw IllegalStateException(
+            "Madina serveriga ikki marta ulanish amalga oshmadi: ${lastError?.message ?: "noma'lum xato"}",
+            lastError
+        )
+    }
+
+    private fun synthesizeOnce(text: String): ByteArray {
         val clean = text.trim().take(3500)
         require(clean.isNotEmpty()) { "Matn bo‘sh" }
 
@@ -95,7 +111,10 @@ object EdgeTtsClient {
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                failure.compareAndSet(null, t)
+                val detail = if (response != null) {
+                    IllegalStateException("HTTP ${response.code}: ${response.message}", t)
+                } else t
+                failure.compareAndSet(null, detail)
                 opened.countDown()
                 completed.countDown()
             }
