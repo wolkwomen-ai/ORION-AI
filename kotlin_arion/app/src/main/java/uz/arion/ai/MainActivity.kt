@@ -764,7 +764,6 @@ class MainActivity : Activity() {
                     if (phrase.isNotBlank()) {
                         if (liveMode) {
                             updateLiveTranscript(phrase)
-                            liveTranscriptView = null
                             askBackend(phrase, true)
                         } else {
                             input.setText((input.text.toString() + " " + phrase).trim())
@@ -868,7 +867,23 @@ class MainActivity : Activity() {
         }
         panel.addView(voiceOrb, LinearLayout.LayoutParams(dp(248), dp(248)).apply {
             gravity = Gravity.CENTER
-            bottomMargin = dp(18)
+            bottomMargin = dp(10)
+        })
+
+        // Jonli suhbatda tanilgan nutq ovozli ekranning o'zida ko'rinadi.
+        liveTranscriptView = TextView(this).apply {
+            text = ""
+            textSize = 16f
+            setTextColor(Color.rgb(35, 35, 35))
+            gravity = Gravity.CENTER
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+            minLines = 1
+            maxLines = 3
+            visibility = View.GONE
+        }
+        panel.addView(liveTranscriptView, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(2)
+            bottomMargin = dp(8)
         })
 
         panel.addView(TextView(this).apply {
@@ -912,7 +927,6 @@ class MainActivity : Activity() {
         sendButton.setOnClickListener {
             if (input.text.toString().trim().isNotEmpty()) sendMessage() else closeVoiceMode()
         }
-        liveTranscriptView = null
         status.text = "Sizni tinglayapman…"
     }
 
@@ -921,6 +935,7 @@ class MainActivity : Activity() {
         if (!liveMode || collapsedVoiceView != null) return
         voicePanel?.let { page.removeView(it) }
         voicePanel = null
+        liveTranscriptView = null
         collapsedVoiceView?.let { page.removeView(it) }
         collapsedVoiceView = null
         scroll.visibility = View.VISIBLE
@@ -953,8 +968,17 @@ class MainActivity : Activity() {
 
     private fun updateLiveTranscript(text: String) {
         if (text.isBlank()) return
+        val voiceText = liveTranscriptView
+        if (liveMode && voicePanel != null && voiceText != null) {
+            // Ovozli ekran ochiq bo'lsa, tanilgan gap A animatsiyasi ostida ko'rinadi.
+            voiceText.text = text
+            voiceText.visibility = View.VISIBLE
+            return
+        }
+
+        // Kichraytirilgan ovozli rejimda matn chat tarixida ko'rsatiladi.
         var bubble = liveTranscriptView
-        if (bubble == null) {
+        if (bubble == null || bubble.parent != chat) {
             bubble = TextView(this).apply {
                 textSize = 16f
                 setTextColor(Color.rgb(35, 35, 35))
