@@ -28,6 +28,9 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import org.json.JSONObject
+import org.jsoup.Jsoup
+import java.net.URLEncoder
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import android.security.keystore.KeyGenParameterSpec
@@ -852,19 +855,70 @@ class MainActivity : Activity() {
             textSize = 16f
         }
         android.app.AlertDialog.Builder(this)
-            .setTitle("INTERNET QIDIRUVI")
+            .setTitle("ARION — INTERNET TADQIQOTI")
+            .setMessage("ARION internetdan manbalarni qidiradi va natijalarni shu suhbatda tahlil qiladi.")
             .setView(queryInput)
-            .setPositiveButton("QIDIRISH") { _, _ ->
+            .setPositiveButton("QIDIRISH VA TAHLIL") { _, _ ->
                 val query = queryInput.text.toString().trim()
-                if (query.isNotEmpty()) {
-                    val uri = android.net.Uri.parse(
-                        "https://www.google.com/search?q=" + android.net.Uri.encode(query)
-                    )
-                    startActivity(Intent(Intent.ACTION_VIEW, uri))
+                if (query.isNotEmpty() && !waitingForAnswer) {
+                    addMessage("Siz", "Internetdan qidirib tahlil qil: $query")
+                    askBackend("Internetdan qidirib, topilgan manbalar asosida tahlil qil: $query", true)
                 }
             }
             .setNegativeButton("BEKOR", null)
             .show()
+    }
+
+    // Birinchi haqiqiy internet vositasi: qidiruv natijalari ARION ichida olinadi.
+    private fun searchWeb(query: String): String {
+        val encoded = URLEncoder.encode(query, "UTF-8")
+        val connection = (URL("https://html.duckduckgo.com/html/?q=$encoded").openConnection()
+            as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 10000
+            readTimeout = 12000
+            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/130 Mobile Safari/537.36")
+            setRequestProperty("Accept", "text/html,application/xhtml+xml")
+        }
+        try {
+            val code = connection.responseCode
+            if (code !in 200..299) throw IOException("Qidiruv xizmati HTTP $code")
+            val html = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            val document = Jsoup.parse(html)
+            val results = document.select(".result")
+            val lines = mutableListOf<String>()
+            for (result in results) {
+                if (lines.size >= 6) break
+                val link = result.selectFirst("a.result__a") ?: continue
+                val title = link.text().trim()
+                val rawUrl = link.attr("href").trim()
+                if (title.isBlank() || rawUrl.isBlank()) continue
+                val absolute = if (rawUrl.startsWith("//")) "https:$rawUrl" else rawUrl
+                val parsed = android.net.Uri.parse(absolute)
+                val target = parsed.getQueryParameter("uddg") ?: absolute
+                if (!target.startsWith("https://") && !target.startsWith("http://")) continue
+                val snippet = result.selectFirst(".result__snippet")?.text()?.trim().orEmpty()
+                lines.add("${lines.size + 1}. $title\n${snippet.take(500)}\nManba: $target")
+            }
+            if (lines.isEmpty()) throw IOException("Qidiruv natijalari olinmadi. Xizmat vaqtincha cheklagan bo‘lishi mumkin.")
+            return lines.joinToString("\n\n")
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun shouldSearchWeb(question: String, forceAgent: Boolean): Boolean {
+        if (forceAgent) return true
+        val q = question.lowercase()
+        val triggers = listOf(
+            "internetdan", "internetda", "qidir", "izlab top", "topib ber",
+            "ish top", "ish qidir", "mijoz top", "xaridor top", "daromad",
+            "pul top", "narxi", "narxini", "bugungi", "hozirgi", "yangilik",
+            "eng yaxshi", "solishtir", "taqqosla", "kompaniya", "kursi",
+            "dollar", "valyuta", "bozor", "e'lon", "elon", "saytlardan",
+            "manbalar", "ma'lumot top", "qayerdan sotib", "xizmat top"
+        )
+        return triggers.any { q.contains(it) }
     }
 
     private fun openPhoneSettings() {
