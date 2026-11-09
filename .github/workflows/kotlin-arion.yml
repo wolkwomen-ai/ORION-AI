@@ -1,4 +1,4 @@
-name: ARION Kotlin Android APK — 2.2 Uzbek Spelling Improvement
+name: ARION Kotlin Android APK — 2.2.1 Madina Connection Retry
 
 on:
   workflow_dispatch:
@@ -57,7 +57,7 @@ jobs:
       - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: ARION-2.2-UZBEK-IMLO-SIGNED-APK
+          name: ARION-2.2.1-MADINA-FIX-SIGNED-APK
           path: kotlin_arion/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
