@@ -337,6 +337,7 @@ class MainActivity : Activity() {
         item("🧠", "O‘zini rivojlantirish") { openSelfDevelopment() }
         item("✦", "Agent rejimi") { toggleAgentMode() }
         item("🧠", "Mustaqil agent markazi") { openAgentCenter() }
+        item("💰", "Daromad imkoniyatlari") { openIncomeOpportunities() }
         section("QO‘SHIMCHA IMKONIYATLAR")
         item("☁", "Ob-havo") { openWeather() }
         item("▤", "TXT fayl yaratish") { createTxtFile() }
@@ -347,7 +348,7 @@ class MainActivity : Activity() {
         drawer.addView(scrollMenu, LinearLayout.LayoutParams(-1, 0, 1f))
 
         val footer = TextView(this).apply {
-            text = "ARION AI  •  3.4"
+            text = "ARION AI  •  3.5"
             textSize = 11f
             setTextColor(Color.GRAY)
             setPadding(dp(8), dp(14), dp(8), dp(4))
@@ -439,6 +440,43 @@ class MainActivity : Activity() {
         card("📋  Joriy vazifalar", "Agent yadrosiga yuborilgan topshiriqlar") { showAgentTasks() }
         android.app.AlertDialog.Builder(this).setTitle("ARION — MUSTAQIL AGENT")
             .setView(ScrollView(this).apply { addView(panel) }).setNegativeButton("YOPISH", null).show()
+    }
+
+    // ARION 3.5: internetdan qonuniy daromad yo‘nalishlarini real vaqtda tadqiq qilish.
+    // Natijalar manbalar bilan tekshiriladi; ilova o‘zi akkaunt ochmaydi yoki pul ishlamaydi.
+    private fun openIncomeOpportunities() {
+        val choices = arrayOf(
+            "Mikro-topshiriqlar va AI ma’lumot ishlari",
+            "Freelance va masofaviy buyurtmalar",
+            "Reklama, affiliate va hamkorlik dasturlari",
+            "Mijoz topish va onlayn xizmatlar",
+            "Kripto bozor tahlili (faqat demo/paper trading)",
+            "Barcha yo‘nalishlarni birgalikda tekshirish"
+        )
+        android.app.AlertDialog.Builder(this)
+            .setTitle("ARION — DAROMAD IMKONIYATLARI")
+            .setItems(choices) { _, which ->
+                val selected = choices[which]
+                val scope = if (which == 5) choices.dropLast(1).joinToString("; ") else selected
+                val prompt = """
+                    O‘zbekiston rezidenti uchun quyidagi yo‘nalishda hozir mavjud, qonuniy va amalda foydalanish mumkin bo‘lgan internet daromad imkoniyatlarini izla: $scope.
+                    Internetdan qidir, imkon qadar platformalarning rasmiy sahifalarini ochib tekshir. Har bir variant uchun:
+                    1) platforma va rasmiy sayt manzili;
+                    2) qanday topshiriq bajariladi va haq qanday hisoblanadi;
+                    3) O‘zbekistondan ro‘yxatdan o‘tish/ishlash mumkinmi;
+                    4) pul yechish usullari, minimal limit va mavjud cheklovlar;
+                    5) real to‘lov dalili yoki rasmiy tarif bormi;
+                    6) xavf, firibgarlik belgilari va foydalanuvchi bajarishi kerak bo‘lgan birinchi qadam.
+                    Kamida 3 ta tekshirilgan variant topishga harakat qil. Manba bilan tasdiqlanmagan to‘lov yoki O‘zbekistonda ishlash imkonini fakt sifatida aytma; noma’lum bo‘lsa ochiq yoz. Oldindan depozit talab qiladigan shubhali takliflarni chiqarib tashla. Soxta akkaunt, CAPTCHA, KYC yoki platforma qoidalarini chetlab o‘tishni tavsiya qilma.
+                    Kripto bo‘yicha faqat bozor ma’lumoti, xavf va demo/paper tradingni tushuntir; real savdo, depozit yoki pul o‘tkazma qilma. Hech qanday platformaga Sardor nomidan ro‘yxatdan o‘tma yoki xabar yuborma.
+                    Javobni o‘zbek tilida, qisqa taqqoslash jadvali va manba havolalari bilan ber. Eng xavfsiz boshlang‘ich 1–2 variantni alohida tavsiya qil.
+                """.trimIndent()
+                addMessage("Siz", "Daromad imkoniyatlarini tekshir: $scope")
+                status.text = "Daromad imkoniyatlari internetdan tekshirilmoqda…"
+                askBackend(prompt, true)
+            }
+            .setNegativeButton("YOPISH", null)
+            .show()
     }
 
     private fun showAgentTaskDialog() {
