@@ -67,6 +67,19 @@ def init_db() -> None:
           currency TEXT NOT NULL, direction TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',
           created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS wallet_receipts (
+          id TEXT PRIMARY KEY,
+          provider TEXT NOT NULL,
+          payment_id TEXT NOT NULL,
+          amount_minor INTEGER NOT NULL CHECK(amount_minor > 0),
+          currency TEXT NOT NULL,
+          status TEXT NOT NULL CHECK(status IN ('pending','verified','refunded','disputed')),
+          event_id TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL,
+          UNIQUE(provider, payment_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_wallet_receipts_status_currency
+          ON wallet_receipts(status, currency);
         CREATE TABLE IF NOT EXISTS audit (
           id TEXT PRIMARY KEY, event TEXT NOT NULL, detail TEXT NOT NULL,
           created_at TEXT NOT NULL
@@ -355,6 +368,46 @@ async def add_ledger(data: LedgerIn):
     return {"saved":True,"id":entry_id}
 
 
+@app.get("/v1/wallet", dependencies=[Depends(require_auth)])
+async def wallet_summary():
+    """Internal accounting view; this is not a bank account or stored-value wallet."""
+    with db() as c:
+        rows = c.execute("""
+            SELECT currency,
+                   COUNT(*) AS verified_receipts,
+                   COALESCE(SUM(amount_minor), 0) AS gross_minor
+            FROM wallet_receipts
+            WHERE status='verified'
+            GROUP BY currency
+            ORDER BY currency
+        """).fetchall()
+        recent = c.execute("""
+            SELECT provider, payment_id, amount_minor, currency, status, created_at
+            FROM wallet_receipts
+            ORDER BY created_at DESC LIMIT 50
+        """).fetchall()
+    balances = []
+    for row in rows:
+        gross = int(row["gross_minor"])
+        reinvestment = gross // 5
+        balances.append({
+            "currency": row["currency"],
+            "verified_receipts": int(row["verified_receipts"]),
+            "gross_received_minor": gross,
+            "arion_development_20_percent_minor": reinvestment,
+            "owner_unallocated_80_percent_minor": gross - reinvestment
+        })
+    return {
+        "wallet_type": "internal_accounting_only",
+        "real_money_custody": False,
+        "payment_provider_connected": False,
+        "payout_to_bank_card_enabled": False,
+        "note": "Faqat provayder webhooki imzosi tekshirilib, to‘lov haqiqatan tasdiqlangandan keyin tushum hisoblanadi. Bu yozuv bankdagi pulni anglatmaydi.",
+        "balances": balances,
+        "recent_receipts": [dict(x) for x in recent]
+    }
+
+
 @app.get("/v1/audit", dependencies=[Depends(require_auth)])
 async def audit_log():
     with db() as c:
@@ -365,8 +418,8 @@ async def audit_log():
 @app.get("/v1/capabilities", dependencies=[Depends(require_auth)])
 async def capabilities():
     return {
-      "available":["market_research","business_planning","draft_creation","task_history","financial_ledger","audit_log"],
-      "not_connected":["platform_oauth","marketplace_order_execution","payment_processor","bank_api","crypto_exchange","24x7_managed_hosting"],
+      "available":["market_research","business_planning","draft_creation","task_history","financial_ledger","internal_wallet_accounting","audit_log"],
+      "not_connected":["platform_oauth","marketplace_order_execution","payment_processor","bank_api","bank_card_payouts","crypto_exchange","24x7_managed_hosting"],
       "approval_required":["account_linking","publishing","client_messages","paid_services","contracts","money_transfers","real_trading"],
       "security_note":"The server does not support identity fraud, money laundering, unauthorized access or platform-rule evasion."
     }
