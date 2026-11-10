@@ -404,7 +404,7 @@ async def wallet_summary():
     return {
         "wallet_type": "internal_accounting_only",
         "real_money_custody": False,
-        "payment_provider_connected": False,
+        "payment_provider_connected": bool(GUMROAD_ACCESS_TOKEN and GUMROAD_PING_SECRET),
         "payout_to_bank_card_enabled": False,
         "note": "Gumroad Ping xabari o‘zi to‘lov isboti emas. Savdo Gumroad API orqali qayta tekshirilgandan keyingina hisobga olinadi. Bu yozuv bankdagi pulni anglatmaydi.",
         "balances": balances,
@@ -486,8 +486,8 @@ async def gumroad_ping(request: Request, token: str = ""):
         owner = user_payload.get("user") or {}
         sale_seller_id = str(sale.get("seller_id") or "")
         owner_id = str(owner.get("user_id") or owner.get("id") or "")
-        if sale_seller_id and owner_id and sale_seller_id != owner_id:
-            raise HTTPException(403, "Savdo ulangan Gumroad hisobiga tegishli emas")
+        if not sale_seller_id or not owner_id or sale_seller_id != owner_id:
+            raise HTTPException(403, "Savdo ulangan Gumroad hisobiga tegishli ekanini tasdiqlab bo‘lmadi")
 
         status = "verified"
         if sale.get("refunded"):
