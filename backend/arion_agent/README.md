@@ -9,13 +9,14 @@ instance before these server features become available on the phone.
 - Provides an internal wallet accounting view that splits verified receipts 20% / 80%; it does not custody money.
 - Receives Gumroad Ping notifications and independently verifies each sale against Gumroad's API before recording it; duplicate notifications are idempotent.
 - Runs an autonomous research cycle on a configurable interval (minimum 15 minutes).
-- Uses an OpenAI-compatible API (Groq by default) to create a concrete business opportunity brief and deliverable.
+- Uses an OpenAI-compatible API (Groq by default) to create a concrete business opportunity brief, a complete usable digital product, marketplace listing copy, suggested test pricing, and marketing post drafts on each successful cycle.
+- Stores generated digital products and draft marketing assets in SQLite and exposes them through authenticated `GET /v1/products`.
 - Searches public web results and treats them as untrusted evidence.
 - Exposes authenticated API endpoints for profile, start/stop, manual cycle, task history, ledger and audit.
 - Uses integer minor units for money.
 
 ## What it does NOT do yet
-No customer messaging, publishing, bank API connection, bank-card payout, crypto exchange adapter,
+No automatic marketplace publishing, customer messaging, bank API connection, bank-card payout, crypto exchange adapter,
 account creation, order acceptance, money transfer, trade execution or contract signing is implemented.
 The agent can research and prepare work products, but it cannot truthfully claim revenue until an actual
 payment is recorded. Platform/account connections must use official OAuth/API flows and the account owner's
@@ -48,6 +49,7 @@ before horizontal scaling.
 - POST /v1/agent/stop
 - POST /v1/agent/cycle
 - GET /v1/agent/status
+- GET /v1/products
 - GET /v1/tasks
 - GET/POST /v1/ledger
 - GET /v1/audit
