@@ -7,6 +7,7 @@ instance before these server features become available on the phone.
 ## What it does
 - Stores the business profile, agent state, work products, audit events and a multi-currency ledger in SQLite.
 - Provides an internal wallet accounting view that splits verified receipts 20% / 80%; it does not custody money.
+- Receives Gumroad Ping notifications and independently verifies each sale against Gumroad's API before recording it; duplicate notifications are idempotent.
 - Runs an autonomous research cycle on a configurable interval (minimum 15 minutes).
 - Uses an OpenAI-compatible API (Groq by default) to create a concrete business opportunity brief and deliverable.
 - Searches public web results and treats them as untrusted evidence.
@@ -14,7 +15,7 @@ instance before these server features become available on the phone.
 - Uses integer minor units for money.
 
 ## What it does NOT do yet
-No marketplace OAuth adapter, customer messaging, publishing, bank/payment connection, bank-card payout, crypto exchange adapter,
+No customer messaging, publishing, bank API connection, bank-card payout, crypto exchange adapter,
 account creation, order acceptance, money transfer, trade execution or contract signing is implemented.
 The agent can research and prepare work products, but it cannot truthfully claim revenue until an actual
 payment is recorded. Platform/account connections must use official OAuth/API flows and the account owner's
@@ -30,6 +31,8 @@ Optional:
 - ARION_MODEL (default qwen/qwen3.8-27b)
 - ARION_DB_PATH (default /data/arion.sqlite3)
 - ARION_CYCLE_SECONDS (default 3600; minimum 900)
+- GUMROAD_ACCESS_TOKEN: Gumroad API access token (never commit it).
+- GUMROAD_PING_SECRET: long random secret used only in the Gumroad Ping URL (never commit it).
 
 Build: docker build -t arion-agent backend/arion_agent
 Run: docker run -p 8080:8080 -v arion-data:/data --env-file .env arion-agent
@@ -49,5 +52,9 @@ before horizontal scaling.
 - GET/POST /v1/ledger
 - GET /v1/audit
 - GET /v1/capabilities
+- GET /v1/integrations/gumroad/status
+- POST /v1/integrations/gumroad/ping?token=YOUR_PING_SECRET
 
-The backend is not yet deployed and the current Android APK is not yet wired to this API.
+Gumroad webhook security: the incoming Ping is treated as an untrusted notification. The backend checks the shared Ping URL secret, fetches the sale from Gumroad's API using GUMROAD_ACCESS_TOKEN, checks the sale ID and authenticated seller, and only then records a positive-price receipt. Refunds and disputes update the existing receipt rather than adding new income. Do not put the API token in the Ping URL or in the Android app. The bank payout connection remains separate and is not implemented.
+
+The current Android APK is not yet wired to this API.
