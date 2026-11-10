@@ -6,6 +6,7 @@ instance before these server features become available on the phone.
 
 ## What it does
 - Stores the business profile, agent state, work products, audit events and a multi-currency ledger in SQLite.
+- Provides an internal wallet accounting view that splits verified receipts 20% / 80%; it does not custody money.
 - Runs an autonomous research cycle on a configurable interval (minimum 15 minutes).
 - Uses an OpenAI-compatible API (Groq by default) to create a concrete business opportunity brief and deliverable.
 - Searches public web results and treats them as untrusted evidence.
@@ -13,7 +14,7 @@ instance before these server features become available on the phone.
 - Uses integer minor units for money.
 
 ## What it does NOT do yet
-No marketplace OAuth adapter, customer messaging, publishing, bank/payment connection, crypto exchange adapter,
+No marketplace OAuth adapter, customer messaging, publishing, bank/payment connection, bank-card payout, crypto exchange adapter,
 account creation, order acceptance, money transfer, trade execution or contract signing is implemented.
 The agent can research and prepare work products, but it cannot truthfully claim revenue until an actual
 payment is recorded. Platform/account connections must use official OAuth/API flows and the account owner's
