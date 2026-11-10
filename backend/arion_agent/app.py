@@ -60,6 +60,13 @@ def init_db() -> None:
           updated_at TEXT NOT NULL
         );
         INSERT OR IGNORE INTO profile(id,updated_at) VALUES(1,datetime('now'));
+        -- Initialize a zero-budget business profile only when the owner has not configured one.
+        c.execute("""UPDATE profile SET
+            brand='ARION Digital Studio',
+            skills='Market research, multilingual content drafting, translation drafts, digital product creation, marketing copy, customer-support templates, data organization.',
+            goal='Find and validate lawful, low-cost ways to earn income online from Uzbekistan. Research real customer demand and eligible platforms; prepare digital products, service offers, sample work, and marketing drafts. Do not claim sales or contact customers without approval.',
+            budget_minor=0, currency='UZS', daily_hours=2, updated_at=?
+            WHERE id=1 AND brand='' AND skills='' AND goal=''""", (now(),))
         CREATE TABLE IF NOT EXISTS tasks (
           id TEXT PRIMARY KEY, title TEXT NOT NULL, kind TEXT NOT NULL,
           status TEXT NOT NULL, details TEXT NOT NULL, result TEXT NOT NULL DEFAULT '',
@@ -251,8 +258,8 @@ platform restrictions. Propose concrete work products and a practical next task.
 
 
 async def scheduler_loop() -> None:
+    # Run promptly after startup when the agent is enabled.
     while True:
-        await asyncio.sleep(CYCLE_SECONDS)
         try:
             with db() as c:
                 active = c.execute("SELECT active FROM profile WHERE id=1").fetchone()["active"]
@@ -262,6 +269,7 @@ async def scheduler_loop() -> None:
             with db() as c:
                 c.execute("UPDATE agent_state SET last_error=? WHERE id=1", (str(exc)[:1000],))
             audit("agent_cycle_failed",{"error":str(exc)[:500]})
+        await asyncio.sleep(CYCLE_SECONDS)
 
 
 @asynccontextmanager
