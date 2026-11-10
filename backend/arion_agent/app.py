@@ -61,12 +61,12 @@ def init_db() -> None:
         );
         INSERT OR IGNORE INTO profile(id,updated_at) VALUES(1,datetime('now'));
         -- Initialize a zero-budget business profile only when the owner has not configured one.
-        c.execute("""UPDATE profile SET
+        UPDATE profile SET
             brand='ARION Digital Studio',
             skills='Market research, multilingual content drafting, translation drafts, digital product creation, marketing copy, customer-support templates, data organization.',
             goal='Find and validate lawful, low-cost ways to earn income online from Uzbekistan. Research real customer demand and eligible platforms; prepare digital products, service offers, sample work, and marketing drafts. Do not claim sales or contact customers without approval.',
-            budget_minor=0, currency='UZS', daily_hours=2, updated_at=?
-            WHERE id=1 AND brand='' AND skills='' AND goal=''""", (now(),))
+            budget_minor=0, currency='UZS', daily_hours=2, updated_at=datetime('now')
+            WHERE id=1 AND brand='' AND skills='' AND goal='';
         CREATE TABLE IF NOT EXISTS tasks (
           id TEXT PRIMARY KEY, title TEXT NOT NULL, kind TEXT NOT NULL,
           status TEXT NOT NULL, details TEXT NOT NULL, result TEXT NOT NULL DEFAULT '',
