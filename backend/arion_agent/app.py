@@ -8,6 +8,8 @@ open accounts, transfer funds, trade assets or sign contracts.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 import os
 import secrets
@@ -31,6 +33,9 @@ AI_URL = os.getenv("ARION_AI_BASE_URL", "https://api.groq.com/openai/v1/chat/com
 AI_MODEL = os.getenv("ARION_MODEL", "qwen/qwen3.8-27b")
 GUMROAD_ACCESS_TOKEN = os.getenv("GUMROAD_ACCESS_TOKEN", "")
 GUMROAD_PING_SECRET = os.getenv("GUMROAD_PING_SECRET", "")
+LEMONSQUEEZY_API_KEY = os.getenv("LEMONSQUEEZY_API_KEY", "")
+LEMONSQUEEZY_STORE_ID = os.getenv("LEMONSQUEEZY_STORE_ID", "")
+LEMONSQUEEZY_WEBHOOK_SECRET = os.getenv("LEMONSQUEEZY_WEBHOOK_SECRET", "")
 CYCLE_SECONDS = max(900, int(os.getenv("ARION_CYCLE_SECONDS", "3600")))
 MAX_RESEARCH_RESULTS = 4
 MAX_TOTAL_RESEARCH_RESULTS = 24
@@ -482,10 +487,155 @@ async def audit_log():
 async def capabilities():
     return {
       "available":["market_research","digital_product_creation","product_listing_drafts","marketing_campaign_drafts","task_history","financial_ledger","internal_wallet_accounting","audit_log"],
-      "not_connected":["marketplace_publishing","marketplace_order_execution","bank_api","bank_card_payouts","crypto_exchange","24x7_managed_hosting"],
-      "approval_required":["marketplace_account_linking","publishing","client_messages","paid_services","contracts","money_transfers","real_trading"],
+      "not_connected":["lemonsqueezy_account_credentials","lemonsqueezy_store_activation","lemonsqueezy_product_creation","bank_api","bank_card_payouts","crypto_exchange","24x7_managed_hosting"],
+      "approval_required":["owner_identity_verification","store_activation","first_product_setup","marketing_account_linking","public_marketing_posts","client_messages","paid_services","contracts","money_transfers","real_trading"],
       "security_note":"The server does not support identity fraud, money laundering, unauthorized access or platform-rule evasion."
     }
+
+
+
+def lemon_headers() -> dict[str, str]:
+    if not LEMONSQUEEZY_API_KEY:
+        raise HTTPException(503, "LEMONSQUEEZY_API_KEY serverda sozlanmagan")
+    return {
+        "Accept": "application/vnd.api+json",
+        "Content-Type": "application/vnd.api+json",
+        "Authorization": f"Bearer {LEMONSQUEEZY_API_KEY}",
+    }
+
+
+@app.get("/v1/integrations/lemonsqueezy/status", dependencies=[Depends(require_auth)])
+async def lemonsqueezy_status():
+    return {
+        "provider": "lemonsqueezy",
+        "api_key_configured": bool(LEMONSQUEEZY_API_KEY),
+        "store_id_configured": bool(LEMONSQUEEZY_STORE_ID),
+        "webhook_secret_configured": bool(LEMONSQUEEZY_WEBHOOK_SECRET),
+        "catalog_read_ready": bool(LEMONSQUEEZY_API_KEY and LEMONSQUEEZY_STORE_ID),
+        "checkout_creation_ready": bool(LEMONSQUEEZY_API_KEY and LEMONSQUEEZY_STORE_ID),
+        "product_creation_via_api": False,
+        "note": "Lemon Squeezy API katalogdagi mahsulot/variantlarni o‘qiydi va checkout yaratadi; mahsulotni dastlab do‘kon panelida egasi yaratadi. Savdo webhooki tushumni bankka to‘langan pul deb hisoblamaydi."
+    }
+
+
+@app.get("/v1/integrations/lemonsqueezy/catalog", dependencies=[Depends(require_auth)])
+async def lemonsqueezy_catalog():
+    if not LEMONSQUEEZY_STORE_ID:
+        raise HTTPException(503, "LEMONSQUEEZY_STORE_ID serverda sozlanmagan")
+    headers = lemon_headers()
+    async with httpx.AsyncClient(timeout=25) as client:
+        response = await client.get(
+            "https://api.lemonsqueezy.com/v1/products",
+            params={"filter[store_id]": LEMONSQUEEZY_STORE_ID, "include": "variants", "page[size]": 100},
+            headers=headers,
+        )
+        if response.is_error:
+            raise HTTPException(502, f"Lemon Squeezy katalog xatosi: HTTP {response.status_code}")
+        payload = response.json()
+    return {"data": payload.get("data", []), "included": payload.get("included", [])}
+
+
+class LemonCheckoutIn(BaseModel):
+    variant_id: str = Field(min_length=1, max_length=30, pattern="^[0-9]+$")
+    product_name: str = Field(default="ARION digital product", max_length=100)
+    description: str = Field(default="", max_length=1000)
+
+
+@app.post("/v1/integrations/lemonsqueezy/checkout", dependencies=[Depends(require_auth)])
+async def lemonsqueezy_checkout(data: LemonCheckoutIn):
+    if not LEMONSQUEEZY_STORE_ID:
+        raise HTTPException(503, "LEMONSQUEEZY_STORE_ID serverda sozlanmagan")
+    body = {
+        "data": {
+            "type": "checkouts",
+            "attributes": {
+                "product_options": {
+                    "name": data.product_name,
+                    "description": data.description,
+                    "receipt_button_text": "View product",
+                    "receipt_thank_you_note": "Thank you for supporting ARION Digital Studio."
+                },
+                "checkout_options": {"embed": False, "locale": "en"},
+                "checkout_data": {"custom": {"source": "arion_agent"}}
+            },
+            "relationships": {
+                "store": {"data": {"type": "stores", "id": LEMONSQUEEZY_STORE_ID}},
+                "variant": {"data": {"type": "variants", "id": data.variant_id}}
+            }
+        }
+    }
+    async with httpx.AsyncClient(timeout=25) as client:
+        response = await client.post(
+            "https://api.lemonsqueezy.com/v1/checkouts",
+            headers=lemon_headers(), json=body
+        )
+        if response.is_error:
+            # Do not expose upstream response bodies; they may contain private account details.
+            raise HTTPException(502, f"Lemon Squeezy checkout xatosi: HTTP {response.status_code}")
+        payload = response.json()
+    checkout = payload.get("data", {})
+    attrs = checkout.get("attributes", {})
+    audit("lemonsqueezy_checkout_created", {
+        "checkout_id": checkout.get("id"),
+        "variant_id": data.variant_id
+    })
+    return {"checkout_id": checkout.get("id"), "checkout_url": attrs.get("url"),
+            "test_mode": attrs.get("test_mode")}
+
+
+@app.post("/v1/integrations/lemonsqueezy/webhook")
+async def lemonsqueezy_webhook(request: Request):
+    if not LEMONSQUEEZY_WEBHOOK_SECRET:
+        raise HTTPException(503, "LEMONSQUEEZY_WEBHOOK_SECRET serverda sozlanmagan")
+    raw = await request.body()
+    if len(raw) > 262144:
+        raise HTTPException(413, "Webhook hajmi juda katta")
+    supplied = request.headers.get("X-Signature", "")
+    expected = hmac.new(LEMONSQUEEZY_WEBHOOK_SECRET.encode(), raw, hashlib.sha256).hexdigest()
+    if not supplied or not hmac.compare_digest(supplied, expected):
+        raise HTTPException(401, "Lemon Squeezy webhook imzosi noto‘g‘ri")
+    try:
+        payload = json.loads(raw)
+        event = str(payload.get("meta", {}).get("event_name", ""))
+        data = payload.get("data", {})
+        attrs = data.get("attributes", {})
+        payment_id = str(data.get("id", ""))
+        if event not in ("order_created", "order_refunded") or not payment_id:
+            return {"ok": True, "ignored": True, "event": event}
+        currency = str(attrs.get("currency") or "").upper()
+        # Lemon Squeezy order totals are represented in the store currency's smallest unit.
+        amount_minor = int(attrs.get("total") or 0)
+        if not currency or amount_minor <= 0:
+            return {"ok": True, "ignored": True, "reason": "order has no positive paid total"}
+        status = "pending" if event == "order_created" else "refunded"
+        with db() as c:
+            existing = c.execute(
+                "SELECT id FROM wallet_receipts WHERE provider='lemonsqueezy' AND payment_id=?",
+                (payment_id,)
+            ).fetchone()
+            if existing:
+                c.execute(
+                    "UPDATE wallet_receipts SET status=?,event_id=? WHERE provider='lemonsqueezy' AND payment_id=?",
+                    (status, event, payment_id)
+                )
+                outcome = "updated"
+            else:
+                c.execute(
+                    """INSERT INTO wallet_receipts
+                       (id,provider,payment_id,amount_minor,currency,status,event_id,created_at)
+                       VALUES(?,?,?,?,?,?,?,?)""",
+                    (str(uuid.uuid4()), "lemonsqueezy", payment_id, amount_minor,
+                     currency, status, event, now())
+                )
+                outcome = "recorded"
+        audit("lemonsqueezy_order_" + outcome, {
+            "payment_id": payment_id, "event": event, "status": status,
+            "currency": currency, "amount_minor": amount_minor
+        })
+        return {"ok": True, "result": outcome, "status": status,
+                "note": "pending savdo tushumi bank payouti kelganini anglatmaydi"}
+    except (ValueError, TypeError, json.JSONDecodeError):
+        raise HTTPException(400, "Webhook JSON yoki buyurtma summasi noto‘g‘ri")
 
 
 @app.get("/v1/integrations/gumroad/status", dependencies=[Depends(require_auth)])
