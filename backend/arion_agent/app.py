@@ -23,7 +23,8 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 DB_PATH = os.getenv("ARION_DB_PATH", "./arion.sqlite3")
@@ -126,10 +127,13 @@ def audit(event: str, detail: dict[str, Any]) -> None:
                   (str(uuid.uuid4()), event, json.dumps(detail, ensure_ascii=False), now()))
 
 
-async def require_auth(authorization: str | None = Header(default=None)) -> None:
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
+async def require_auth(credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme)) -> None:
     if not API_TOKEN:
         raise HTTPException(503, "ARION_API_TOKEN serverda sozlanmagan")
-    supplied = authorization.removeprefix("Bearer ").strip() if authorization else ""
+    supplied = credentials.credentials.strip() if credentials and credentials.scheme.lower() == "bearer" else ""
     if not secrets.compare_digest(supplied, API_TOKEN):
         raise HTTPException(401, "Ruxsat berilmadi")
 
