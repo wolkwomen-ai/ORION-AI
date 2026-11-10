@@ -101,6 +101,9 @@ def init_db() -> None:
         );
         INSERT OR IGNORE INTO agent_state(id) VALUES(1);
         """)
+        # Honor the owner's request to start the agent, but only if an AI key exists.
+        if AI_KEY:
+            c.execute("UPDATE profile SET active=1,updated_at=? WHERE id=1", (now(),))
 
 
 def audit(event: str, detail: dict[str, Any]) -> None:
