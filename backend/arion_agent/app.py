@@ -13,13 +13,15 @@ import os
 import secrets
 import sqlite3
 import uuid
+from decimal import Decimal, InvalidOperation
+from urllib.parse import parse_qs
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 DB_PATH = os.getenv("ARION_DB_PATH", "./arion.sqlite3")
@@ -27,6 +29,8 @@ API_TOKEN = os.getenv("ARION_API_TOKEN", "")
 AI_KEY = os.getenv("ARION_AI_API_KEY", "")
 AI_URL = os.getenv("ARION_AI_BASE_URL", "https://api.groq.com/openai/v1/chat/completions")
 AI_MODEL = os.getenv("ARION_MODEL", "qwen/qwen3.8-27b")
+GUMROAD_ACCESS_TOKEN = os.getenv("GUMROAD_ACCESS_TOKEN", "")
+GUMROAD_PING_SECRET = os.getenv("GUMROAD_PING_SECRET", "")
 CYCLE_SECONDS = max(900, int(os.getenv("ARION_CYCLE_SECONDS", "3600")))
 MAX_RESEARCH_RESULTS = 4
 MAX_TOTAL_RESEARCH_RESULTS = 24
@@ -419,7 +423,117 @@ async def audit_log():
 async def capabilities():
     return {
       "available":["market_research","business_planning","draft_creation","task_history","financial_ledger","internal_wallet_accounting","audit_log"],
-      "not_connected":["platform_oauth","marketplace_order_execution","payment_processor","bank_api","bank_card_payouts","crypto_exchange","24x7_managed_hosting"],
+      "not_connected":["marketplace_order_execution","bank_api","bank_card_payouts","crypto_exchange","24x7_managed_hosting"],
       "approval_required":["account_linking","publishing","client_messages","paid_services","contracts","money_transfers","real_trading"],
       "security_note":"The server does not support identity fraud, money laundering, unauthorized access or platform-rule evasion."
     }
+
+
+@app.get("/v1/integrations/gumroad/status", dependencies=[Depends(require_auth)])
+async def gumroad_status():
+    """Reports configuration only; never returns the access token or ping secret."""
+    return {
+        "provider": "gumroad",
+        "access_token_configured": bool(GUMROAD_ACCESS_TOKEN),
+        "ping_secret_configured": bool(GUMROAD_PING_SECRET),
+        "sales_webhook_ready": bool(GUMROAD_ACCESS_TOKEN and GUMROAD_PING_SECRET),
+        "bank_payout_connected": False,
+        "note": "Gumroad sales are verified against the Gumroad API before they enter internal accounting. This does not confirm a bank payout."
+    }
+
+
+@app.post("/v1/integrations/gumroad/ping")
+async def gumroad_ping(request: Request, token: str = ""):
+    """Receive an unsigned Gumroad Ping, then independently verify the sale via Gumroad API."""
+    if not GUMROAD_PING_SECRET or not secrets.compare_digest(token, GUMROAD_PING_SECRET):
+        raise HTTPException(401, "Gumroad ping ruxsati noto‘g‘ri")
+    if not GUMROAD_ACCESS_TOKEN:
+        raise HTTPException(503, "GUMROAD_ACCESS_TOKEN serverda sozlanmagan")
+
+    raw = (await request.body()).decode("utf-8", errors="replace")
+    form = {k: v[-1] for k, v in parse_qs(raw, keep_blank_values=True).items()}
+    sale_id = (form.get("sale_id") or form.get("id") or "").strip()
+    if not sale_id:
+        # Gumroad's dashboard test ping may not represent a real sale.
+        audit("gumroad_test_ping_received", {"fields": sorted(form.keys())})
+        return {"ok": True, "ignored": True, "reason": "test ping yoki sale_id yo‘q"}
+
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.get(
+                f"https://api.gumroad.com/v2/sales/{sale_id}",
+                params={"access_token": GUMROAD_ACCESS_TOKEN}
+            )
+            response.raise_for_status()
+            payload = response.json()
+        if payload.get("success") is not True:
+            raise HTTPException(502, "Gumroad API savdoni tasdiqlamadi")
+        sale = payload.get("sale") or payload.get("data") or {}
+        verified_id = str(sale.get("id") or sale.get("sale_id") or "")
+        if verified_id != sale_id:
+            raise HTTPException(409, "Gumroad API qaytargan savdo ID mos kelmadi")
+
+        # Cross-check seller ownership against the account authenticated by this token.
+        async with httpx.AsyncClient(timeout=20) as client:
+            user_response = await client.get(
+                "https://api.gumroad.com/v2/user",
+                params={"access_token": GUMROAD_ACCESS_TOKEN}
+            )
+            user_response.raise_for_status()
+            user_payload = user_response.json()
+        if user_payload.get("success") is not True:
+            raise HTTPException(502, "Gumroad hisob egasi tekshirilmadi")
+        owner = user_payload.get("user") or {}
+        sale_seller_id = str(sale.get("seller_id") or "")
+        owner_id = str(owner.get("user_id") or owner.get("id") or "")
+        if sale_seller_id and owner_id and sale_seller_id != owner_id:
+            raise HTTPException(403, "Savdo ulangan Gumroad hisobiga tegishli emas")
+
+        status = "verified"
+        if sale.get("refunded"):
+            status = "refunded"
+        elif sale.get("disputed") or sale.get("chargebacked"):
+            status = "disputed"
+
+        try:
+            amount_minor = int(Decimal(str(sale.get("price", "0"))))
+        except (InvalidOperation, ValueError, TypeError):
+            raise HTTPException(422, "Gumroad savdo summasi noto‘g‘ri")
+        currency = str(sale.get("currency") or "").upper()
+        if amount_minor <= 0 or not currency:
+            # Free products are not revenue and must never increase the wallet.
+            return {"ok": True, "ignored": True, "reason": "bepul yoki summasi yo‘q savdo"}
+
+        with db() as c:
+            existing = c.execute(
+                "SELECT id FROM wallet_receipts WHERE provider='gumroad' AND payment_id=?",
+                (sale_id,)
+            ).fetchone()
+            if existing:
+                c.execute(
+                    "UPDATE wallet_receipts SET status=?,event_id=? WHERE provider='gumroad' AND payment_id=?",
+                    (status, str(form.get("resource_name", "sale"))[:80], sale_id)
+                )
+                outcome = "updated"
+            else:
+                c.execute(
+                    """INSERT INTO wallet_receipts
+                       (id,provider,payment_id,amount_minor,currency,status,event_id,created_at)
+                       VALUES(?,?,?,?,?,?,?,?)""",
+                    (str(uuid.uuid4()), "gumroad", sale_id, amount_minor, currency,
+                     status, str(form.get("resource_name", "sale"))[:80], now())
+                )
+                outcome = "recorded"
+        audit("gumroad_sale_" + outcome, {
+            "sale_id": sale_id, "status": status,
+            "amount_minor": amount_minor, "currency": currency
+        })
+        return {"ok": True, "result": outcome, "status": status, "currency": currency}
+    except HTTPException:
+        raise
+    except httpx.HTTPStatusError as exc:
+        audit("gumroad_verification_failed", {"sale_id": sale_id, "http_status": exc.response.status_code})
+        raise HTTPException(502, "Gumroad API orqali savdoni tekshirib bo‘lmadi")
+    except Exception as exc:
+        audit("gumroad_verification_failed", {"sale_id": sale_id, "error": str(exc)[:250]})
+        raise HTTPException(502, "Gumroad savdosini tekshirishda xatolik")
