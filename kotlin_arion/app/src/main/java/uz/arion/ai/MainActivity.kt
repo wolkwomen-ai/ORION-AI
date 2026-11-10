@@ -416,6 +416,78 @@ class MainActivity : Activity() {
 
     // ARION 3.4: vazifalar va moliyaviy daftar uchun boshqaruv markazi.
     // Hozirgi versiyada agent faqat tadqiqot/reja/qoralama yaratadi; tashqi amallar yoqilmagan.
+    private fun showCloudBusinessDashboard() {
+        status.text = "Agent natijalari, mahsulotlar va hisob yuklanmoqda…"
+        remoteAgentRequest("/v1/products") { productsOk, productsResponse ->
+            remoteAgentRequest("/v1/tasks") { tasksOk, tasksResponse ->
+                remoteAgentRequest("/v1/wallet") { walletOk, walletResponse ->
+                    val report = StringBuilder()
+                    report.append("ARION — BULUTLI ISH NATIJALARI\\n\\n")
+
+                    if (productsOk) {
+                        val products = runCatching {
+                            JSONObject(productsResponse).optJSONArray("items") ?: org.json.JSONArray()
+                        }.getOrElse { org.json.JSONArray() }
+                        report.append("📦 TAYYORLANGAN MAHSULOTLAR: ").append(products.length()).append("\\n")
+                        for (i in 0 until minOf(products.length(), 5)) {
+                            val item = products.optJSONObject(i) ?: continue
+                            report.append("• ").append(item.optString("title", "Nomsiz mahsulot"))
+                                .append(" — ").append(item.optString("status", "draft")).append("\\n")
+                            val price = item.optString("price_suggestion")
+                            if (price.isNotBlank()) report.append("  Narx taklifi: ").append(price).append("\\n")
+                        }
+                        if (products.length() == 0) report.append("Hozircha mahsulot yaratilmagan.\\n")
+                    } else {
+                        report.append("Mahsulotlar olinmadi: ").append(productsResponse.take(180)).append("\\n")
+                    }
+
+                    report.append("\\n🧩 OXIRGI VAZIFALAR:\\n")
+                    if (tasksOk) {
+                        val tasks = runCatching { org.json.JSONArray(tasksResponse) }
+                            .getOrElse { org.json.JSONArray() }
+                        for (i in 0 until minOf(tasks.length(), 5)) {
+                            val item = tasks.optJSONObject(i) ?: continue
+                            report.append("• ").append(item.optString("title", "Vazifa"))
+                                .append(" — ").append(item.optString("status", "noma’lum")).append("\\n")
+                        }
+                        if (tasks.length() == 0) report.append("Hozircha vazifa yo‘q.\\n")
+                    } else {
+                        report.append("Vazifalar olinmadi: ").append(tasksResponse.take(180)).append("\\n")
+                    }
+
+                    report.append("\\n💰 ARION HISOB-KITOBI:\\n")
+                    if (walletOk) {
+                        val wallet = runCatching { JSONObject(walletResponse) }.getOrElse { JSONObject() }
+                        val balances = wallet.optJSONArray("balances") ?: org.json.JSONArray()
+                        if (balances.length() == 0) report.append("Hisobga kiritilgan tushum hozircha 0.\\n")
+                        for (i in 0 until balances.length()) {
+                            val row = balances.optJSONObject(i) ?: continue
+                            val currency = row.optString("currency", "")
+                            val gross = row.optLong("gross_received_minor", 0L) / 100.0
+                            val arion = row.optLong("arion_development_20_percent_minor", 0L) / 100.0
+                            val owner = row.optLong("owner_unallocated_80_percent_minor", 0L) / 100.0
+                            report.append(currency).append(": jami ").append(String.format("%.2f", gross))
+                                .append("; ARION 20%: ").append(String.format("%.2f", arion))
+                                .append("; egaga 80%: ").append(String.format("%.2f", owner)).append("\\n")
+                        }
+                        report.append("\\n").append(wallet.optString("note"))
+                    } else {
+                        report.append("Hisob-kitob olinmadi: ").append(walletResponse.take(180))
+                    }
+
+                    report.append("\\n\\nEslatma: bu ichki hisob-kitob oynasi, bank hamyoni emas. Bank kartaga pul saqlash yoki yechish hozir ulanmagan. Agent pul o‘tkazmaydi.")
+                    status.text = if (productsOk && tasksOk && walletOk) "Bulutli agent ma’lumotlari yangilandi" else "Ayrim ma’lumotlarni olib bo‘lmadi"
+                    android.app.AlertDialog.Builder(this@MainActivity)
+                        .setTitle("ARION — NATIJALAR VA HISOB")
+                        .setMessage(report.toString())
+                        .setPositiveButton("YANGILASH") { _, _ -> showCloudBusinessDashboard() }
+                        .setNegativeButton("YOPISH", null)
+                        .show()
+                }
+            }
+        }
+    }
+
     private fun openAgentCenter() {
         loadAgentLedgerOnce()
         val panel = LinearLayout(this).apply {
@@ -440,6 +512,7 @@ class MainActivity : Activity() {
         card("☁️  Bulutli mustaqil agent", "Serverga ulanib, ARIONning doimiy tadqiqot agentini boshqarish") { openRemoteAgentSettings() }
         card("▶️  Mustaqil agentni ishga tushirish", "Saqlangan biznes profilingizni serverga yuboradi va birinchi siklni boshlaydi") { startRemoteAgent() }
         card("📡  Bulutli agent holati", "Oxirgi sikl, vazifalar va server holatini ko‘rish") { showRemoteAgentStatus() }
+        card("📊  Agent natijalari va ARION hamyoni", "Mahsulotlar, vazifalar va hisob-kitobni serverdan ko‘rish") { showCloudBusinessDashboard() }
         card("🕶  Maxfiy biznes profilini sozlash", "Ommaviy brend nomi va ish yo‘nalishini shifrlab saqlash") { openPrivateBusinessProfile() }
         card("＋  Yangi agent topshirig‘i", "Tadqiqot, xabar qoralamasi yoki buyurtma loyihasi") { showAgentTaskDialog() }
         card("📒  Daromad yoki xarajat kiritish", "Summalar telefonda saqlanadi") { showAgentLedgerDialog() }
