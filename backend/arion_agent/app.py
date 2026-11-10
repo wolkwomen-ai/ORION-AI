@@ -406,7 +406,7 @@ async def wallet_summary():
         "real_money_custody": False,
         "payment_provider_connected": False,
         "payout_to_bank_card_enabled": False,
-        "note": "Faqat provayder webhooki imzosi tekshirilib, to‘lov haqiqatan tasdiqlangandan keyin tushum hisoblanadi. Bu yozuv bankdagi pulni anglatmaydi.",
+        "note": "Gumroad Ping xabari o‘zi to‘lov isboti emas. Savdo Gumroad API orqali qayta tekshirilgandan keyingina hisobga olinadi. Bu yozuv bankdagi pulni anglatmaydi.",
         "balances": balances,
         "recent_receipts": [dict(x) for x in recent]
     }
