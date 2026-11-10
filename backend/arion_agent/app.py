@@ -14,7 +14,7 @@ import secrets
 import sqlite3
 import uuid
 from decimal import Decimal, InvalidOperation
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, quote
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -450,7 +450,10 @@ async def gumroad_ping(request: Request, token: str = ""):
     if not GUMROAD_ACCESS_TOKEN:
         raise HTTPException(503, "GUMROAD_ACCESS_TOKEN serverda sozlanmagan")
 
-    raw = (await request.body()).decode("utf-8", errors="replace")
+    raw_body = await request.body()
+    if len(raw_body) > 65536:
+        raise HTTPException(413, "Gumroad Ping hajmi ruxsat etilgan chegaradan katta")
+    raw = raw_body.decode("utf-8", errors="replace")
     form = {k: v[-1] for k, v in parse_qs(raw, keep_blank_values=True).items()}
     sale_id = (form.get("sale_id") or form.get("id") or "").strip()
     if not sale_id:
@@ -461,7 +464,7 @@ async def gumroad_ping(request: Request, token: str = ""):
     try:
         async with httpx.AsyncClient(timeout=20) as client:
             response = await client.get(
-                f"https://api.gumroad.com/v2/sales/{sale_id}",
+                f"https://api.gumroad.com/v2/sales/{quote(sale_id, safe='')}",
                 params={"access_token": GUMROAD_ACCESS_TOKEN}
             )
             response.raise_for_status()
@@ -535,5 +538,8 @@ async def gumroad_ping(request: Request, token: str = ""):
         audit("gumroad_verification_failed", {"sale_id": sale_id, "http_status": exc.response.status_code})
         raise HTTPException(502, "Gumroad API orqali savdoni tekshirib bo‘lmadi")
     except Exception as exc:
-        audit("gumroad_verification_failed", {"sale_id": sale_id, "error": str(exc)[:250]})
+        # Never persist exception text: HTTP client errors may contain credential-bearing URLs.
+        audit("gumroad_verification_failed", {
+            "sale_id": sale_id, "error_type": type(exc).__name__
+        })
         raise HTTPException(502, "Gumroad savdosini tekshirishda xatolik")
