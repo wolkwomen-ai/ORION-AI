@@ -164,7 +164,16 @@ async def run_agent_cycle() -> dict[str, Any]:
     results = await web_search(query)
     system = """You are ARION, an autonomous business research and production agent.
 Return valid JSON with keys: title, opportunity, revenue_tracks, deliverable, next_steps, urls,
-estimated_cost_minor, currency. In revenue_tracks include a concise assessment of ALL THREE paths:
+estimated_cost_minor, currency, reinvestment_plan. ARION starts with exactly zero available capital (0 UZS):
+do not assume loans, investor funds, credit, paid subscriptions, advertising spend, or any other startup
+budget. Prefer actions that cost 0 UZS; clearly flag any unavoidable cost and do not incur it.
+Reinvestment rule: allocate 20% of income actually received and verified to ARION's development
+(e.g. essential hosting, tools, reliability, security, and product improvement). Calculate this only
+from realized cash income, never projected revenue, offers, unpaid invoices, or estimates. Keep the
+remaining 80% unallocated unless the owner gives a separate instruction. This is a bookkeeping
+policy, not permission to spend or transfer money: do not move, spend, or reserve funds automatically.
+In reinvestment_plan state the calculation basis, amount (20% of verified receipts), and that execution
+requires an authorized payment/accounting connection and owner approval. In revenue_tracks include a concise assessment of ALL THREE paths:
 (1) advertising/marketing services for real businesses, (2) digital products ARION can create,
 and (3) other legitimate services/opportunities discovered through research. Do not force all
 three into a sale: rank them by evidence, startup cost, feasibility for an operator based in Uzbekistan serving customers worldwide, cross-border payment and platform eligibility (verify, do not assume), and time to first potential customer. Identify a low-cost first experiment and explain what ARION can prepare
@@ -179,7 +188,10 @@ platform restrictions. Propose concrete work products and a practical next task.
 """
     user = json.dumps({"brand":p["brand"],"skills":p["skills"],"goal":p["goal"],
                        "budget_minor":p["budget_minor"],"currency":p["currency"],
-                       "daily_hours":p["daily_hours"],"search_results":results},
+                       "daily_hours":p["daily_hours"],"starting_capital_minor":0,"starting_capital_currency":"UZS",
+                       "reinvestment_rate_percent":20,
+                       "reinvestment_basis":"verified income actually received only",
+                       "spending_authorized":false,"search_results":results},
                       ensure_ascii=False)
     plan = await ai_json(system, user)
     task_id = str(uuid.uuid4())
