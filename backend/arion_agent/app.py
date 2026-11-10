@@ -198,7 +198,17 @@ async def ai_json(system: str, user: str) -> dict[str, Any]:
                               json=payload)
         r.raise_for_status()
         content = r.json()["choices"][0]["message"]["content"]
-    return json.loads(content)
+    parsed = json.loads(content)
+    if isinstance(parsed, dict):
+        return parsed
+    if isinstance(parsed, list):
+        # Some model endpoints ignore response_format and return a JSON array.
+        # Accept a single object from that array, but never call dict methods on a list.
+        objects = [item for item in parsed if isinstance(item, dict)]
+        if len(objects) == 1:
+            return objects[0]
+        raise RuntimeError("AI javobi JSON ro‘yxati bo‘lib keldi; bitta obyekt kutilgan edi")
+    raise RuntimeError("AI javobi JSON obyekt emas; qayta urinish kerak")
 
 
 async def run_agent_cycle() -> dict[str, Any]:
