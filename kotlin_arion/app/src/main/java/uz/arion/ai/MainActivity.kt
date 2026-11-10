@@ -422,44 +422,44 @@ class MainActivity : Activity() {
             remoteAgentRequest("/v1/tasks") { tasksOk, tasksResponse ->
                 remoteAgentRequest("/v1/wallet") { walletOk, walletResponse ->
                     val report = StringBuilder()
-                    report.append("ARION — BULUTLI ISH NATIJALARI\\n\\n")
+                    report.append("ARION — BULUTLI ISH NATIJALARI\n\n")
 
                     if (productsOk) {
                         val products = runCatching {
                             JSONObject(productsResponse).optJSONArray("items") ?: org.json.JSONArray()
                         }.getOrElse { org.json.JSONArray() }
-                        report.append("📦 TAYYORLANGAN MAHSULOTLAR: ").append(products.length()).append("\\n")
+                        report.append("📦 TAYYORLANGAN MAHSULOTLAR: ").append(products.length()).append("\n")
                         for (i in 0 until minOf(products.length(), 5)) {
                             val item = products.optJSONObject(i) ?: continue
                             report.append("• ").append(item.optString("title", "Nomsiz mahsulot"))
-                                .append(" — ").append(item.optString("status", "draft")).append("\\n")
+                                .append(" — ").append(item.optString("status", "draft")).append("\n")
                             val price = item.optString("price_suggestion")
-                            if (price.isNotBlank()) report.append("  Narx taklifi: ").append(price).append("\\n")
+                            if (price.isNotBlank()) report.append("  Narx taklifi: ").append(price).append("\n")
                         }
-                        if (products.length() == 0) report.append("Hozircha mahsulot yaratilmagan.\\n")
+                        if (products.length() == 0) report.append("Hozircha mahsulot yaratilmagan.\n")
                     } else {
-                        report.append("Mahsulotlar olinmadi: ").append(productsResponse.take(180)).append("\\n")
+                        report.append("Mahsulotlar olinmadi: ").append(productsResponse.take(180)).append("\n")
                     }
 
-                    report.append("\\n🧩 OXIRGI VAZIFALAR:\\n")
+                    report.append("\n🧩 OXIRGI VAZIFALAR:\n")
                     if (tasksOk) {
                         val tasks = runCatching { org.json.JSONArray(tasksResponse) }
                             .getOrElse { org.json.JSONArray() }
                         for (i in 0 until minOf(tasks.length(), 5)) {
                             val item = tasks.optJSONObject(i) ?: continue
                             report.append("• ").append(item.optString("title", "Vazifa"))
-                                .append(" — ").append(item.optString("status", "noma’lum")).append("\\n")
+                                .append(" — ").append(item.optString("status", "noma’lum")).append("\n")
                         }
-                        if (tasks.length() == 0) report.append("Hozircha vazifa yo‘q.\\n")
+                        if (tasks.length() == 0) report.append("Hozircha vazifa yo‘q.\n")
                     } else {
-                        report.append("Vazifalar olinmadi: ").append(tasksResponse.take(180)).append("\\n")
+                        report.append("Vazifalar olinmadi: ").append(tasksResponse.take(180)).append("\n")
                     }
 
-                    report.append("\\n💰 ARION HISOB-KITOBI:\\n")
+                    report.append("\n💰 ARION HISOB-KITOBI:\n")
                     if (walletOk) {
                         val wallet = runCatching { JSONObject(walletResponse) }.getOrElse { JSONObject() }
                         val balances = wallet.optJSONArray("balances") ?: org.json.JSONArray()
-                        if (balances.length() == 0) report.append("Hisobga kiritilgan tushum hozircha 0.\\n")
+                        if (balances.length() == 0) report.append("Hisobga kiritilgan tushum hozircha 0.\n")
                         for (i in 0 until balances.length()) {
                             val row = balances.optJSONObject(i) ?: continue
                             val currency = row.optString("currency", "")
@@ -468,14 +468,14 @@ class MainActivity : Activity() {
                             val owner = row.optLong("owner_unallocated_80_percent_minor", 0L) / 100.0
                             report.append(currency).append(": jami ").append(String.format("%.2f", gross))
                                 .append("; ARION 20%: ").append(String.format("%.2f", arion))
-                                .append("; egaga 80%: ").append(String.format("%.2f", owner)).append("\\n")
+                                .append("; egaga 80%: ").append(String.format("%.2f", owner)).append("\n")
                         }
-                        report.append("\\n").append(wallet.optString("note"))
+                        report.append("\n").append(wallet.optString("note"))
                     } else {
                         report.append("Hisob-kitob olinmadi: ").append(walletResponse.take(180))
                     }
 
-                    report.append("\\n\\nEslatma: bu ichki hisob-kitob oynasi, bank hamyoni emas. Bank kartaga pul saqlash yoki yechish hozir ulanmagan. Agent pul o‘tkazmaydi.")
+                    report.append("\n\nEslatma: bu ichki hisob-kitob oynasi, bank hamyoni emas. Bank kartaga pul saqlash yoki yechish hozir ulanmagan. Agent pul o‘tkazmaydi.")
                     status.text = if (productsOk && tasksOk && walletOk) "Bulutli agent ma’lumotlari yangilandi" else "Ayrim ma’lumotlarni olib bo‘lmadi"
                     android.app.AlertDialog.Builder(this@MainActivity)
                         .setTitle("ARION — NATIJALAR VA HISOB")
@@ -1569,9 +1569,9 @@ class MainActivity : Activity() {
                     if (!target.startsWith("https://") && !target.startsWith("http://")) continue
                     if (target.contains("duckduckgo.com") || !seen.add(target)) continue
                     val snippet = container.selectFirst(".result__snippet, .result-snippet, .result__extras, td")?.text()?.trim().orEmpty()
-                    lines.add("${lines.size + 1}. $title\\n${snippet.take(450)}\\nManba: $target")
+                    lines.add("${lines.size + 1}. $title\n${snippet.take(450)}\nManba: $target")
                 }
-                if (lines.isNotEmpty()) return lines.joinToString("\\n\\n")
+                if (lines.isNotEmpty()) return lines.joinToString("\n\n")
 
                 // Ba'zi DDG sahifalarida natijalar konteyner klassisiz keladi.
                 val looseLinks = document.select("a.result__a, a.result-link")
@@ -1585,10 +1585,10 @@ class MainActivity : Activity() {
                     val target = parsed.getQueryParameter("uddg") ?: absolute
                     if ((target.startsWith("https://") || target.startsWith("http://")) &&
                         !target.contains("duckduckgo.com") && seen.add(target)) {
-                        lines.add("${lines.size + 1}. $title\\nManba: $target")
+                        lines.add("${lines.size + 1}. $title\nManba: $target")
                     }
                 }
-                if (lines.isNotEmpty()) return lines.joinToString("\\n\\n")
+                if (lines.isNotEmpty()) return lines.joinToString("\n\n")
                 failures.add("HTTP 200, lekin sahifada ajratiladigan natija yo‘q")
             } catch (e: Exception) {
                 failures.add(e.localizedMessage ?: e.javaClass.simpleName)
