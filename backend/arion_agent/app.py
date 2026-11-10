@@ -374,20 +374,20 @@ async def add_ledger(data: LedgerIn):
 
 @app.get("/v1/wallet", dependencies=[Depends(require_auth)])
 async def wallet_summary():
-    """Internal accounting view; this is not a bank account or stored-value wallet."""
+    """Internal accounting view based on manually recorded money actually received."""
     with db() as c:
         rows = c.execute("""
             SELECT currency,
-                   COUNT(*) AS verified_receipts,
+                   COUNT(*) AS income_entries,
                    COALESCE(SUM(amount_minor), 0) AS gross_minor
-            FROM wallet_receipts
-            WHERE status='verified'
+            FROM ledger
+            WHERE direction='income'
             GROUP BY currency
             ORDER BY currency
         """).fetchall()
         recent = c.execute("""
-            SELECT provider, payment_id, amount_minor, currency, status, created_at
-            FROM wallet_receipts
+            SELECT id, label, amount_minor, currency, direction, note, created_at
+            FROM ledger
             ORDER BY created_at DESC LIMIT 50
         """).fetchall()
     balances = []
@@ -396,7 +396,7 @@ async def wallet_summary():
         reinvestment = gross // 5
         balances.append({
             "currency": row["currency"],
-            "verified_receipts": int(row["verified_receipts"]),
+            "recorded_income_entries": int(row["income_entries"]),
             "gross_received_minor": gross,
             "arion_development_20_percent_minor": reinvestment,
             "owner_unallocated_80_percent_minor": gross - reinvestment
@@ -404,13 +404,12 @@ async def wallet_summary():
     return {
         "wallet_type": "internal_accounting_only",
         "real_money_custody": False,
-        "payment_provider_connected": bool(GUMROAD_ACCESS_TOKEN and GUMROAD_PING_SECRET),
+        "payment_provider_connected": False,
         "payout_to_bank_card_enabled": False,
-        "note": "Gumroad Ping xabari o‘zi to‘lov isboti emas. Savdo Gumroad API orqali qayta tekshirilgandan keyingina hisobga olinadi. Bu yozuv bankdagi pulni anglatmaydi.",
+        "note": "Gumroad tekshiruvi ishlatilmaydi. Faqat pul haqiqatda kelib tushgandan keyin egasi ledgerga income sifatida kiritgan yozuvlar hisoblanadi. Bu bank hisobvarag‘i yoki pul saqlash hamyoni emas.",
         "balances": balances,
-        "recent_receipts": [dict(x) for x in recent]
+        "recent_entries": [dict(x) for x in recent]
     }
-
 
 @app.get("/v1/audit", dependencies=[Depends(require_auth)])
 async def audit_log():
