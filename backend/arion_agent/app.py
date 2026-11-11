@@ -591,6 +591,10 @@ async def products_view_data(request: Request):
     result = []
     for row in rows:
         item = dict(row)
+        item["downloads"] = {
+            "pdf": f"/v1/products/{item['id']}/download/pdf",
+            "txt": f"/v1/products/{item['id']}/download/txt"
+        }
         try:
             item["marketing_assets"] = json.loads(item["marketing_assets"])
         except (TypeError, ValueError):
