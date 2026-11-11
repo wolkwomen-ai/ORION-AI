@@ -400,7 +400,25 @@ app = FastAPI(title="ARION 4.0 Agent API", version="4.0.0", lifespan=lifespan)
 
 @app.get("/health")
 async def health():
-    return {"ok":True,"service":"ARION 4.0","time":now()}
+    # Public, non-sensitive operational snapshot for Render and the owner app.
+    with db() as c:
+        state = c.execute(
+            "SELECT active FROM profile WHERE id=1"
+        ).fetchone()
+        stats = c.execute(
+            "SELECT last_cycle, cycle_count, last_error FROM agent_state WHERE id=1"
+        ).fetchone()
+    return {
+        "ok": True,
+        "service": "ARION 4.0",
+        "time": now(),
+        "agent_active": bool(state["active"]) if state else False,
+        "cycle_running": cycle_lock.locked(),
+        "cycle_started_at": cycle_started_at or None,
+        "last_cycle": stats["last_cycle"] if stats else "",
+        "cycle_count": int(stats["cycle_count"]) if stats else 0,
+        "has_error": bool(stats["last_error"]) if stats else False,
+    }
 
 
 @app.get("/v1/profile", dependencies=[Depends(require_auth)])
