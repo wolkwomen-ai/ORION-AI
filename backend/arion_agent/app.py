@@ -24,11 +24,13 @@ from typing import Any
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 DB_PATH = os.getenv("ARION_DB_PATH", "./arion.sqlite3")
 API_TOKEN = os.getenv("ARION_API_TOKEN", "")
+PRODUCTS_VIEW_KEY = os.getenv("ARION_PRODUCTS_VIEW_KEY", "")
 AI_KEY = os.getenv("ARION_AI_API_KEY", "")
 AI_URL = os.getenv("ARION_AI_BASE_URL", "https://api.groq.com/openai/v1/chat/completions")
 AI_MODEL = os.getenv("ARION_MODEL", "qwen/qwen3.8-27b")
@@ -506,6 +508,86 @@ async def products():
         result.append(item)
     return {"items": result, "count": len(result),
             "note": "Bular tayyorlangan qoralamalar. Bozorga joylash va mijozlarga yuborish alohida tasdiq hamda platforma ulanishini talab qiladi."}
+
+
+PRODUCTS_VIEW_HTML = r'''<!doctype html>
+<html lang="uz"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ARION — Mahsulotlar</title>
+<style>
+:root{color-scheme:dark}body{margin:0;background:#101522;color:#edf2ff;font:16px system-ui,sans-serif}
+main{max-width:760px;margin:0 auto;padding:24px 16px}h1{font-size:25px;margin:8px 0}
+p{color:#b8c3d9;line-height:1.5}.panel,.product{background:#192235;border:1px solid #30405d;border-radius:16px;padding:18px;margin:14px 0}
+input,button{box-sizing:border-box;width:100%;padding:14px;border-radius:10px;font:inherit}
+input{background:#0e1728;color:white;border:1px solid #526482;margin:8px 0}
+button{background:#6d8cff;color:#071126;border:0;font-weight:700;margin-top:8px}
+small{color:#9eacc5}.meta{color:#b8c3d9;font-size:14px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.6 system-ui;color:#e6ecfb}
+.hidden{display:none}.error{color:#ff9b9b}.price{font-weight:700;color:#b9ceff}
+</style></head><body><main>
+<h1>ARION — Mahsulotlarim</h1>
+<p>Bu sahifa faqat ARION yaratgan qoralamalarni ko‘rsatadi. Parol serverda tekshiriladi.</p>
+<section class="panel" id="login">
+<label for="key">Ko‘rish paroli</label><input id="key" type="password" autocomplete="current-password" placeholder="Parolni kiriting">
+<button id="open">Mahsulotlarni ko‘rish</button><p id="error" class="error"></p>
+</section><section id="results" class="hidden"><p id="count"></p><div id="items"></div></section>
+<script>
+const login=document.getElementById('login'),results=document.getElementById('results');
+document.getElementById('open').addEventListener('click',async()=>{
+ const key=document.getElementById('key').value;
+ const error=document.getElementById('error');error.textContent='';
+ if(!key){error.textContent='Parolni kiriting.';return;}
+ const btn=document.getElementById('open');btn.disabled=true;btn.textContent='Tekshirilmoqda...';
+ try{
+  const response=await fetch('/v1/products/view',{headers:{'X-ARION-View-Key':key},cache:'no-store'});
+  if(!response.ok){let msg='Parol noto‘g‘ri yoki server hali tayyor emas.';try{const d=await response.json();msg=d.detail||msg;}catch{}throw new Error(msg);}
+  const data=await response.json();const root=document.getElementById('items');root.replaceChildren();
+  document.getElementById('count').textContent='Jami qoralama mahsulotlar: '+data.count;
+  for(const item of data.items){
+   const card=document.createElement('article');card.className='product';
+   const h=document.createElement('h2');h.textContent=item.title||'Nomsiz mahsulot';card.append(h);
+   const meta=document.createElement('p');meta.className='meta';
+   meta.textContent=[item.audience,item.format,item.status,item.created_at].filter(Boolean).join(' • ');card.append(meta);
+   if(item.price_suggestion){const price=document.createElement('p');price.className='price';price.textContent='Sinov narxi: '+item.price_suggestion;card.append(price);}
+   if(item.listing_title){const t=document.createElement('h3');t.textContent='Sotuv sarlavhasi';card.append(t);const v=document.createElement('p');v.textContent=item.listing_title;card.append(v);}
+   if(item.listing_description){const t=document.createElement('h3');t.textContent='Tavsif';card.append(t);const v=document.createElement('p');v.textContent=item.listing_description;card.append(v);}
+   if(item.content){const t=document.createElement('h3');t.textContent='Mahsulotning to‘liq matni';card.append(t);const v=document.createElement('pre');v.textContent=item.content;card.append(v);}
+   root.append(card);
+  }
+  if(!data.count){const p=document.createElement('p');p.textContent='Hozircha saqlangan mahsulot yo‘q.';root.append(p);}
+  login.classList.add('hidden');results.classList.remove('hidden');
+ }catch(e){error.textContent=e.message;}
+ finally{btn.disabled=false;btn.textContent='Mahsulotlarni ko‘rish';}
+});
+document.getElementById('key').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('open').click();});
+</script></main></body></html>'''
+
+
+@app.get("/products", response_class=HTMLResponse)
+async def products_view_page():
+    return HTMLResponse(PRODUCTS_VIEW_HTML, headers={"Cache-Control":"no-store"})
+
+
+@app.get("/v1/products/view")
+async def products_view_data(request: Request):
+    if not PRODUCTS_VIEW_KEY:
+        raise HTTPException(503, "Mahsulotlar sahifasi serverda sozlanmagan")
+    supplied = request.headers.get("X-ARION-View-Key", "")
+    if not supplied or not secrets.compare_digest(supplied, PRODUCTS_VIEW_KEY):
+        raise HTTPException(401, "Parol noto‘g‘ri")
+    with db() as c:
+        rows = c.execute("SELECT * FROM digital_products ORDER BY created_at DESC LIMIT 100").fetchall()
+    result = []
+    for row in rows:
+        item = dict(row)
+        try:
+            item["marketing_assets"] = json.loads(item["marketing_assets"])
+        except (TypeError, ValueError):
+            item["marketing_assets"] = []
+        result.append(item)
+    return JSONResponse(
+        {"items":result,"count":len(result),
+         "note":"Bular tayyorlangan qoralamalar; sotuv yoki daromad tasdig‘i emas."},
+        headers={"Cache-Control":"no-store"}
+    )
 
 
 @app.get("/v1/ledger", dependencies=[Depends(require_auth)])
