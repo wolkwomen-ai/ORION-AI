@@ -27,6 +27,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
+from product_files import build_product_files
 
 DB_PATH = os.getenv("ARION_DB_PATH", "./arion.sqlite3")
 API_TOKEN = os.getenv("ARION_API_TOKEN", "")
@@ -100,6 +101,11 @@ def init_db() -> None:
           marketing_assets TEXT NOT NULL DEFAULT '[]', status TEXT NOT NULL DEFAULT 'draft',
           created_at TEXT NOT NULL,
           FOREIGN KEY(task_id) REFERENCES tasks(id)
+        );
+        CREATE TABLE IF NOT EXISTS product_files (
+          product_id TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('pdf','txt')),
+          filename TEXT NOT NULL, mime_type TEXT NOT NULL, content BLOB NOT NULL,
+          created_at TEXT NOT NULL, PRIMARY KEY(product_id,kind)
         );
         CREATE TABLE IF NOT EXISTS wallet_receipts (
           id TEXT PRIMARY KEY,
@@ -331,16 +337,18 @@ or contact anyone."""
                    product_content,json.dumps(plan.get("urls",results),ensure_ascii=False),
                    now(),now()))
         if product_content.strip():
+            product_id = str(uuid.uuid4())
             c.execute("""INSERT INTO digital_products
                 (id,task_id,title,audience,format,content,listing_title,listing_description,
                  price_suggestion,marketing_assets,status,created_at)
                 VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (str(uuid.uuid4()),task_id,product_title,
+                (product_id,task_id,product_title,
                  str(product.get("audience",""))[:1000],str(product.get("format",""))[:200],
                  product_content,str(product.get("listing_title",""))[:300],
                  str(product.get("listing_description",""))[:5000],
                  str(product.get("price_suggestion",""))[:300],
                  json.dumps(marketing_assets,ensure_ascii=False),"draft",now()))
+            build_product_files(c, product_id, product_title, product_content)
         c.execute("""UPDATE agent_state SET last_cycle=?,last_error='',cycle_count=cycle_count+1
                      WHERE id=1""",(now(),))
     audit("agent_cycle_completed",{"task_id":task_id,"title":title})
@@ -501,6 +509,10 @@ async def products():
     result = []
     for row in rows:
         item = dict(row)
+        item["downloads"] = {
+            "pdf": f"/v1/products/{item['id']}/download/pdf",
+            "txt": f"/v1/products/{item['id']}/download/txt"
+        }
         try:
             item["marketing_assets"] = json.loads(item["marketing_assets"])
         except (TypeError, ValueError):
@@ -588,6 +600,24 @@ async def products_view_data(request: Request):
          "note":"Bular tayyorlangan qoralamalar; sotuv yoki daromad tasdig‘i emas."},
         headers={"Cache-Control":"no-store"}
     )
+
+
+@app.get("/v1/products/{product_id}/download/{kind}")
+async def download_product_file(product_id: str, kind: str, request: Request):
+    if kind not in ("pdf", "txt"):
+        raise HTTPException(404, "Fayl turi topilmadi")
+    supplied = request.headers.get("X-ARION-View-Key", "")
+    if not PRODUCTS_VIEW_KEY or not supplied or not secrets.compare_digest(supplied, PRODUCTS_VIEW_KEY):
+        raise HTTPException(401, "Mahsulot yuklab olish ruxsati berilmadi")
+    with db() as c:
+        row = c.execute("SELECT filename,mime_type,content FROM product_files WHERE product_id=? AND kind=?",
+                        (product_id, kind)).fetchone()
+    if not row:
+        raise HTTPException(404, "Mahsulot fayli hali yaratilmagan")
+    from fastapi.responses import Response
+    return Response(content=bytes(row["content"]), media_type=row["mime_type"],
+                    headers={"Content-Disposition": f'attachment; filename="{row["filename"]}"',
+                             "Cache-Control":"no-store"})
 
 
 @app.get("/v1/ledger", dependencies=[Depends(require_auth)])
