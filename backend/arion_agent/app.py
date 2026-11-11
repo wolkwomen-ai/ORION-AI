@@ -509,6 +509,12 @@ async def products():
     result = []
     for row in rows:
         item = dict(row)
+        # Backfill files for products created before automatic file generation was deployed.
+        if str(item.get("content") or "").strip():
+            existing = c.execute("SELECT kind FROM product_files WHERE product_id=?", (item["id"],)).fetchall()
+            kinds = {x["kind"] for x in existing}
+            if not {"pdf", "txt"}.issubset(kinds):
+                build_product_files(c, item["id"], item["title"], item["content"])
         item["downloads"] = {
             "pdf": f"/v1/products/{item['id']}/download/pdf",
             "txt": f"/v1/products/{item['id']}/download/txt"
