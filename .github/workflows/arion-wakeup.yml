@@ -1,0 +1,20 @@
+name: ARION free wake-up
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake ARION free web service
+        run: |
+          set -eu
+          code="$(curl --silent --show-error --location --max-time 180 --output /tmp/arion-health.json --write-out '%{http_code}' https://arion-agent.onrender.com/health)"
+          cat /tmp/arion-health.json
+          test "$code" = "200"
