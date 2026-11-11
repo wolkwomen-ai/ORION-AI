@@ -43,6 +43,9 @@ MAX_TOTAL_RESEARCH_RESULTS = 24
 
 # Prevent the scheduler and an API-triggered start from running duplicate cycles.
 cycle_lock = asyncio.Lock()
+# Visible in the authenticated status endpoint so callers can distinguish
+# "request accepted" from a cycle that is actually still running.
+cycle_started_at = ""
 
 
 def now() -> str:
@@ -343,11 +346,26 @@ or contact anyone."""
 
 
 async def run_agent_cycle() -> dict[str, Any]:
-    # If a cycle is already active, do not queue a second copy of the same work.
+    global cycle_started_at
+    # Do not queue duplicate work while the current cycle is active.
     if cycle_lock.locked():
-        return {"status": "already_running", "message": "Agent sikli allaqachon bajarilmoqda"}
+        return {
+            "status": "already_running",
+            "message": "Agent sikli allaqachon bajarilmoqda",
+            "cycle_started_at": cycle_started_at or None,
+        }
     async with cycle_lock:
-        return await _run_agent_cycle_unlocked()
+        cycle_started_at = now()
+        try:
+            return await _run_agent_cycle_unlocked()
+        except Exception as exc:
+            # Persist failures from manual/API starts as well as scheduler runs.
+            with db() as c:
+                c.execute("UPDATE agent_state SET last_error=? WHERE id=1", (str(exc)[:1000],))
+            audit("agent_cycle_failed", {"error": str(exc)[:500]})
+            raise
+        finally:
+            cycle_started_at = ""
 
 
 async def scheduler_loop() -> None:
@@ -440,7 +458,12 @@ async def agent_status():
     with db() as c:
         p = dict(c.execute("SELECT active FROM profile WHERE id=1").fetchone())
         s = dict(c.execute("SELECT * FROM agent_state WHERE id=1").fetchone())
-    return {**p,**s,"cycle_seconds":CYCLE_SECONDS}
+    return {
+        **p, **s,
+        "cycle_seconds": CYCLE_SECONDS,
+        "cycle_running": cycle_lock.locked(),
+        "cycle_started_at": cycle_started_at or None,
+    }
 
 
 @app.get("/v1/tasks", dependencies=[Depends(require_auth)])
