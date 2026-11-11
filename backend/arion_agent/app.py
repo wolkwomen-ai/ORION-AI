@@ -191,10 +191,10 @@ async def web_search(query: str) -> list[dict[str, str]]:
         return []
 
 
-async def ai_json(system: str, user: str) -> dict[str, Any]:
+async def ai_json(system: str, user: str, max_tokens: int = 2200) -> dict[str, Any]:
     if not AI_KEY:
         raise RuntimeError("ARION_AI_API_KEY serverda sozlanmagan")
-    payload = {"model": AI_MODEL, "temperature": 0.2, "max_tokens": 2200, "response_format":{"type":"json_object"},
+    payload = {"model": AI_MODEL, "temperature": 0.2, "max_tokens": max_tokens, "response_format":{"type":"json_object"},
                "messages":[{"role":"system","content":system},{"role":"user","content":user}]}
     async with httpx.AsyncClient(timeout=60) as client:
         r = await client.post(AI_URL, headers={"Authorization":f"Bearer {AI_KEY}"},
@@ -283,14 +283,42 @@ platform restrictions. Propose concrete work products and a practical next task.
                        "reinvestment_basis":"verified income actually received only",
                        "spending_authorized":False,"search_results":results},
                       ensure_ascii=False)
-    plan = await ai_json(system, user)
-    task_id = str(uuid.uuid4())
+    plan = await ai_json(system, user, max_tokens=5000)
     title = str(plan.get("title","Bozor imkoniyatini o‘rganish"))[:180]
-    detail = json.dumps(plan, ensure_ascii=False)
     product = plan.get("product") if isinstance(plan.get("product"), dict) else {}
+    product_content = str(product.get("content") or plan.get("deliverable") or "").strip()
+
+    # A research plan is not a finished product. If the first model response omitted
+    # the deliverable or returned only a placeholder, request the product separately.
+    if len(product_content) < 300:
+        product_system = """You are ARION's digital-product production module.
+Return one valid JSON object with: title, audience, problem, format, content,
+listing_title, listing_description, price_suggestion, marketing_assets, delivery_notes.
+Create one genuinely usable, complete, original digital product in content (at least
+700 words where appropriate, or a complete practical template/checklist with all fields
+and instructions). Never return an outline, placeholder, or summary. Keep it zero-cost
+to produce, useful to a clearly defined buyer, and honest: do not claim proven demand,
+customers, sales, or guaranteed results. Include exactly 3 short promotional drafts and
+8 keywords. Price is only a test hypothesis, not a confirmed market price. Do not publish
+or contact anyone."""
+        product_user = json.dumps({
+            "brand": p["brand"], "skills": p["skills"], "goal": p["goal"],
+            "research_plan": plan, "public_research_sources": results,
+            "instruction": "Create the complete downloadable product content now."
+        }, ensure_ascii=False)
+        product = await ai_json(product_system, product_user, max_tokens=5000)
+        product_content = str(product.get("content") or "").strip()
+
+    if len(product_content) < 300:
+        raise RuntimeError("Mahsulot mazmuni yetarli emas: agent vazifani bajarildi deb belgilamadi va mahsulotni saqlamadi.")
+
     product_title = str(product.get("title") or title)[:180]
-    product_content = str(product.get("content") or plan.get("deliverable") or "")
     marketing_assets = product.get("marketing_assets", [])
+    if not isinstance(marketing_assets, list):
+        marketing_assets = []
+
+    task_id = str(uuid.uuid4())
+    detail = json.dumps({**plan, "product": product}, ensure_ascii=False)
     with db() as c:
         c.execute("""INSERT INTO tasks(id,title,kind,status,details,result,source_urls,created_at,updated_at)
                      VALUES(?,?,?,?,?,?,?,?,?)""",
