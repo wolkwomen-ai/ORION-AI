@@ -41,6 +41,9 @@ CYCLE_SECONDS = max(900, int(os.getenv("ARION_CYCLE_SECONDS", "3600")))
 MAX_RESEARCH_RESULTS = 4
 MAX_TOTAL_RESEARCH_RESULTS = 24
 
+# Prevent the scheduler and an API-triggered start from running duplicate cycles.
+cycle_lock = asyncio.Lock()
+
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -211,7 +214,7 @@ async def ai_json(system: str, user: str) -> dict[str, Any]:
     raise RuntimeError("AI javobi JSON obyekt emas; qayta urinish kerak")
 
 
-async def run_agent_cycle() -> dict[str, Any]:
+async def _run_agent_cycle_unlocked() -> dict[str, Any]:
     with db() as c:
         p = dict(c.execute("SELECT * FROM profile WHERE id=1").fetchone())
     if not p["active"]:
@@ -309,6 +312,14 @@ platform restrictions. Propose concrete work products and a practical next task.
                      WHERE id=1""",(now(),))
     audit("agent_cycle_completed",{"task_id":task_id,"title":title})
     return {"status":"completed","task_id":task_id,"plan":plan,"sources":results}
+
+
+async def run_agent_cycle() -> dict[str, Any]:
+    # If a cycle is already active, do not queue a second copy of the same work.
+    if cycle_lock.locked():
+        return {"status": "already_running", "message": "Agent sikli allaqachon bajarilmoqda"}
+    async with cycle_lock:
+        return await _run_agent_cycle_unlocked()
 
 
 async def scheduler_loop() -> None:
