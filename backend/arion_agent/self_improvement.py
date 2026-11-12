@@ -7,6 +7,7 @@ on a separate branch and pass isolated tests before an owner-approved release.
 from __future__ import annotations
 
 import ast
+import json
 import re
 import sqlite3
 import uuid
