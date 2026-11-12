@@ -7,6 +7,10 @@ on a separate branch and pass isolated tests before an owner-approved release.
 from __future__ import annotations
 
 import ast
+import re
+import sqlite3
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -60,3 +64,71 @@ def inspect_backend(root: Path | None = None) -> dict[str, Any]:
             "changes files, runs generated code, or deploys changes."
         ),
     }
+
+
+_ALLOWED_IMPORTS = {
+    "math", "statistics", "decimal", "re", "collections", "typing",
+    "dataclasses", "enum", "json", "datetime"
+}
+_FORBIDDEN_NAMES = {
+    "exec", "eval", "compile", "open", "__import__", "input",
+    "breakpoint"
+}
+
+
+def validate_proposal_source(source: str) -> dict[str, Any]:
+    """Perform conservative static checks. This is not a substitute for sandboxing."""
+    if not isinstance(source, str) or not source.strip():
+        return {"ok": False, "reason": "Kod bo‘sh"}
+    if len(source.encode("utf-8")) > 20000:
+        return {"ok": False, "reason": "Kod hajmi 20 KB chegarasidan oshdi"}
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:
+        return {"ok": False, "reason": f"Python sintaksis xatosi: {exc.msg}", "line": exc.lineno}
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            names = [a.name.split(".")[0] for a in node.names] if isinstance(node, ast.Import) else [(node.module or "").split(".")[0]]
+            if any(name not in _ALLOWED_IMPORTS for name in names):
+                return {"ok": False, "reason": "Ruxsat etilmagan import"}
+        if isinstance(node, ast.Name) and node.id in _FORBIDDEN_NAMES:
+            return {"ok": False, "reason": "Xavfli funksiya nomi aniqlandi"}
+        if isinstance(node, ast.Attribute) and node.attr.startswith("__"):
+            return {"ok": False, "reason": "Dunder atributlardan foydalanish taqiqlangan"}
+        if isinstance(node, (ast.With, ast.AsyncWith, ast.Global, ast.Nonlocal)):
+            return {"ok": False, "reason": "Tashqi resurs yoki global holatga ruxsat yo‘q"}
+    return {"ok": True, "reason": "Sintaksis va boshlang‘ich statik tekshiruvdan o‘tdi"}
+
+
+def init_proposal_store(conn: sqlite3.Connection) -> None:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS self_improvement_proposals (
+            id TEXT PRIMARY KEY,
+            module_name TEXT NOT NULL,
+            goal TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            source TEXT NOT NULL,
+            validation TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'proposed',
+            created_at TEXT NOT NULL
+        )
+    """)
+
+
+def store_proposal(conn: sqlite3.Connection, module_name: str, goal: str,
+                   summary: str, source: str, validation: dict[str, Any]) -> str:
+    if not re.fullmatch(r"[a-z][a-z0-9_]{1,40}", module_name):
+        raise ValueError("Modul nomi noto‘g‘ri")
+    if not validation.get("ok"):
+        raise ValueError("Tekshiruvdan o‘tmagan kod saqlanmaydi")
+    proposal_id = str(uuid.uuid4())
+    conn.execute(
+        """INSERT INTO self_improvement_proposals
+           (id,module_name,goal,summary,source,validation,status,created_at)
+           VALUES(?,?,?,?,?,?,?,?)""",
+        (proposal_id, module_name, goal[:1000], summary[:2000], source,
+         json.dumps(validation, ensure_ascii=False), "proposed",
+         datetime.now(timezone.utc).isoformat())
+    )
+    return proposal_id
