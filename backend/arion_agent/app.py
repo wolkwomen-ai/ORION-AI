@@ -130,8 +130,8 @@ def init_db() -> None:
           last_error TEXT NOT NULL DEFAULT '', cycle_count INTEGER NOT NULL DEFAULT 0
         );
         INSERT OR IGNORE INTO agent_state(id) VALUES(1);
-        init_proposal_store(c);
         """)
+        init_proposal_store(c)
         # Honor the owner's request to start the agent, but only if an AI key exists.
         if AI_KEY:
             c.execute("UPDATE profile SET active=1,updated_at=? WHERE id=1", (now(),))
