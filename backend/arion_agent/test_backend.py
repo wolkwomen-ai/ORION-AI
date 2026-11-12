@@ -35,6 +35,21 @@ class BackendFoundationTests(unittest.TestCase):
         self.assertTrue(app.API_TOKEN)
         self.assertNotEqual(app.API_TOKEN, "")
 
+    def test_self_improvement_static_validation(self):
+        self.assertTrue(app.validate_proposal_source("def add(a, b):\n    return a + b")["ok"])
+        self.assertFalse(app.validate_proposal_source("import os\ndef x():\n    return 1")["ok"])
+        self.assertFalse(app.validate_proposal_source("eval(2)")["ok"])
+        self.assertFalse(app.validate_proposal_source("def broken(:")["ok"])
+
+    def test_self_improvement_proposal_store(self):
+        source = "def answer():\n    return 42"
+        validation = app.validate_proposal_source(source)
+        with app.db() as conn:
+            proposal_id = app.store_proposal(conn, "sample_helper", "Add an arithmetic helper", "Test proposal", source, validation)
+            row = conn.execute("SELECT status,module_name FROM self_improvement_proposals WHERE id=?", (proposal_id,)).fetchone()
+        self.assertEqual(row["status"], "proposed")
+        self.assertEqual(row["module_name"], "sample_helper")
+
     def test_no_unapproved_money_or_platform_executor(self):
         routes = {route.path for route in app.app.routes}
         self.assertNotIn("/v1/payments/transfer", routes)
