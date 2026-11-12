@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from product_files import build_product_files
-from self_improvement import inspect_backend
+from self_improvement import (inspect_backend, validate_proposal_source, init_proposal_store, store_proposal)
 
 DB_PATH = os.getenv("ARION_DB_PATH", "./arion.sqlite3")
 API_TOKEN = os.getenv("ARION_API_TOKEN", "")
@@ -130,6 +130,7 @@ def init_db() -> None:
           last_error TEXT NOT NULL DEFAULT '', cycle_count INTEGER NOT NULL DEFAULT 0
         );
         INSERT OR IGNORE INTO agent_state(id) VALUES(1);
+        init_proposal_store(c);
         """)
         # Honor the owner's request to start the agent, but only if an AI key exists.
         if AI_KEY:
