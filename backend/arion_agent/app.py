@@ -28,6 +28,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from product_files import build_product_files
+from self_improvement import (inspect_backend, validate_proposal_source, init_proposal_store, store_proposal)
 
 DB_PATH = os.getenv("ARION_DB_PATH", "./arion.sqlite3")
 API_TOKEN = os.getenv("ARION_API_TOKEN", "")
@@ -130,6 +131,7 @@ def init_db() -> None:
         );
         INSERT OR IGNORE INTO agent_state(id) VALUES(1);
         """)
+        init_proposal_store(c)
         # Honor the owner's request to start the agent, but only if an AI key exists.
         if AI_KEY:
             c.execute("UPDATE profile SET active=1,updated_at=? WHERE id=1", (now(),))
@@ -708,6 +710,64 @@ async def capabilities():
       "approval_required":["owner_identity_verification","store_activation","first_product_setup","marketing_account_linking","public_marketing_posts","client_messages","paid_services","contracts","money_transfers","real_trading"],
       "security_note":"The server does not support identity fraud, money laundering, unauthorized access or platform-rule evasion."
     }
+
+@app.get("/v1/self-improvement/status", dependencies=[Depends(require_auth)])
+async def self_improvement_status():
+    """Read-only report; this endpoint cannot modify or deploy source code."""
+    return inspect_backend()
+
+class SelfImprovementProposalIn(BaseModel):
+    module_name: str = Field(min_length=2, max_length=41, pattern="^[a-z][a-z0-9_]{1,40}$")
+    goal: str = Field(min_length=15, max_length=1000)
+
+
+@app.post("/v1/self-improvement/proposals", dependencies=[Depends(require_auth)])
+async def create_self_improvement_proposal(data: SelfImprovementProposalIn):
+    """Generate and store a reviewable new-module proposal; never write or execute it."""
+    prompt_system = """You are ARION code proposal writer.
+Return one JSON object with keys summary and source. source must be complete Python
+source for a NEW standalone helper module. Keep it small and deterministic.
+Do not use network, filesystem, subprocess, environment variables, dynamic imports,
+reflection, eval, exec, compile, open, threads, or external services. Use only safe
+standard-library modules: math, statistics, decimal, re, collections, typing,
+dataclasses, enum, json, datetime. No credentials or secrets. Include docstrings
+and simple functions. The code will be reviewed and statically checked, not executed.
+Do not claim that it is deployed or active."""
+    prompt_user = json.dumps({
+        "new_module_name": data.module_name,
+        "requested_capability": data.goal,
+        "constraint": "Create a safe, isolated helper module only; do not modify existing files."
+    }, ensure_ascii=False)
+    proposal = await ai_json(prompt_system, prompt_user, max_tokens=3000)
+    source = proposal.get("source")
+    summary = str(proposal.get("summary") or "AI code proposal")
+    if not isinstance(source, str):
+        raise HTTPException(502, "AI did not return complete Python source")
+    validation = validate_proposal_source(source)
+    if not validation.get("ok"):
+        audit("self_improvement_proposal_rejected", {"module_name": data.module_name, "reason": validation.get("reason", "validation_failed")})
+        raise HTTPException(422, {"message": "Static validation failed; proposal not saved", "validation": validation})
+    with db() as c:
+        proposal_id = store_proposal(c, data.module_name, data.goal, summary, source, validation)
+    audit("self_improvement_proposal_created", {"proposal_id": proposal_id, "module_name": data.module_name})
+    return {"id": proposal_id, "module_name": data.module_name, "summary": summary, "status": "proposed", "validation": validation, "executed": False, "deployed": False}
+
+
+@app.get("/v1/self-improvement/proposals", dependencies=[Depends(require_auth)])
+async def list_self_improvement_proposals():
+    with db() as c:
+        rows = c.execute("SELECT id,module_name,goal,summary,validation,status,created_at FROM self_improvement_proposals ORDER BY created_at DESC LIMIT 30").fetchall()
+    return [dict(row) for row in rows]
+
+
+@app.get("/v1/self-improvement/proposals/{proposal_id}", dependencies=[Depends(require_auth)])
+async def get_self_improvement_proposal(proposal_id: str):
+    with db() as c:
+        row = c.execute("SELECT * FROM self_improvement_proposals WHERE id=?", (proposal_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Proposal not found")
+    return dict(row)
+
 
 
 
