@@ -28,6 +28,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from product_files import build_product_files
+from self_improvement import inspect_backend
 
 DB_PATH = os.getenv("ARION_DB_PATH", "./arion.sqlite3")
 API_TOKEN = os.getenv("ARION_API_TOKEN", "")
@@ -708,6 +709,12 @@ async def capabilities():
       "approval_required":["owner_identity_verification","store_activation","first_product_setup","marketing_account_linking","public_marketing_posts","client_messages","paid_services","contracts","money_transfers","real_trading"],
       "security_note":"The server does not support identity fraud, money laundering, unauthorized access or platform-rule evasion."
     }
+
+@app.get("/v1/self-improvement/status", dependencies=[Depends(require_auth)])
+async def self_improvement_status():
+    """Read-only report; this endpoint cannot modify or deploy source code."""
+    return inspect_backend()
+
 
 
 
