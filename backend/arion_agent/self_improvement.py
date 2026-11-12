@@ -49,14 +49,15 @@ def inspect_backend(root: Path | None = None) -> dict[str, Any]:
             "source_inspection": True,
             "syntax_validation": True,
             "isolated_test_execution": False,
-            "ai_code_proposals": False,
+            "ai_code_proposals": True,
+            "proposal_storage": True,
             "automatic_source_writes": False,
             "automatic_deployment": False,
             "automatic_rollback": False,
         },
         "tests_present": tests_present,
         "next_stage": (
-            "Add an isolated test runner and reviewable change proposals; "
+            "Add an isolated test runner and owner-approved release with backup and rollback; "
             "do not grant the agent direct production write access."
         ),
         "safety": (
